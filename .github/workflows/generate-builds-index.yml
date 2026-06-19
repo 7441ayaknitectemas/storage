@@ -1,0 +1,63 @@
+name: Generate builds.json
+
+on:
+  push:
+    branches: [main]
+    paths: ['builds/*.json']
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate builds.json
+        run: |
+          python3 -c "
+          import os, json, glob
+          from datetime import datetime, timezone
+
+          builds_dir = 'builds'
+          repo = '${{ github.repository }}'
+          ref = '${{ github.ref_name }}'
+
+          entries = []
+          total_size = 0
+          for f in sorted(glob.glob(os.path.join(builds_dir, '*.json'))):
+              fname = os.path.basename(f)
+              name = fname.replace('.json', '')
+              size = os.path.getsize(f)
+              total_size += size
+              entries.append({
+                  'name': name,
+                  'filename': fname,
+                  'size': size,
+                  'url': f'https://raw.githubusercontent.com/{repo}/{ref}/{f.replace(chr(92), \"/\")}'
+              })
+
+          data = {
+              'repo': repo,
+              'updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'total': len(entries),
+              'total_size': total_size,
+              'builds': entries
+          }
+
+          with open('builds.json', 'w') as out:
+              json.dump(data, out, indent=2)
+          "
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add builds.json
+          if git diff --cached --quiet; then
+            echo "No changes to commits"
+          else
+            git commit -m "auto: update builds.json"
+            git push
+          fi

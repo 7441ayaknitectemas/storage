@@ -1,0 +1,580 @@
+[
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0.666667, 0.333333, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1909.39026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -24)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0.666667, 0.333333, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1906.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -25)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(1, 0, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1909.39026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -24)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 1, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1911.89026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -23)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 0.333333, 1)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1916.89026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -21)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 0.666667, 1)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1911.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -23)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0.666667, 0.333333, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1921.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -19)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": [],
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 68.5475616, 1911.89026, 0, 0, 1, -1, 0, 0, 0, -1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 6, -23)"
+    },
+    {
+        "Name": "Post",
+        "Colors": {
+            "Post|1.25, 2.5, 1.25": "Color3.new(0, 0, 0)"
+        },
+        "ID": 195,
+        "CFrame": "CFrame.new(-1543.79919, 71.0475616, 1916.89026, 1, 0, 0, 0, -1, 0, 0, 0, -1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 7, -21)"
+    },
+    {
+        "Name": "Post",
+        "Colors": {
+            "Post|1.25, 2.5, 1.25": "Color3.new(0, 0, 0)"
+        },
+        "ID": 195,
+        "CFrame": "CFrame.new(-1543.79919, 68.5475616, 1909.39026, 1, 0, 0, 0, 0, -1, 0, 1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 6, -24)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 1, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1914.39026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -22)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 0.333333, 1)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1919.39026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -20)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0, 0.666667, 1)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1916.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -21)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0.666667, 0.333333, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 61.0475578, 1919.39026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 3, -20)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": [],
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 68.5475616, 1916.89026, 0, 0, 1, -1, 0, 0, 0, -1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 6, -21)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(1, 0, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1906.89026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -25)"
+    },
+    {
+        "Name": "Post",
+        "Colors": {
+            "Post|1.25, 2.5, 1.25": "Color3.new(0, 0, 0)"
+        },
+        "ID": 195,
+        "CFrame": "CFrame.new(-1543.79919, 71.0475616, 1911.89026, 1, 0, 0, 0, -1, 0, 0, 0, -1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 7, -23)"
+    },
+    {
+        "Name": "Post",
+        "Colors": {
+            "Post|1.25, 2.5, 1.25": "Color3.new(0, 0, 0)"
+        },
+        "ID": 195,
+        "CFrame": "CFrame.new(-1543.79919, 68.5475616, 1919.39026, 1, 0, 0, 0, 0, -1, 0, 1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 6, -20)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(1, 1, 0)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 56.0475578, 1921.89026, 0, -1, 0, 1, 0, -0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 1, -19)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": [],
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 66.0475616, 1919.39026, -1, 0, 0, 0, 1, 0, 0, 0, -1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 5, -20)"
+    },
+    {
+        "Colors": {
+            "Other|1.2999999523162842, 2.200000047683716, 1.2999999523162842": "Color3.new(1, 0, 1)",
+            "Main|2.5, 0.30000001192092896, 2.5": "Color3.new(1, 0, 1)"
+        },
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "A",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "S",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 57.4475594, 1906.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "1000",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "50",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "true",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 2, -25)"
+    },
+    {
+        "Colors": {
+            "Other|1.2999999523162842, 2.200000047683716, 1.2999999523162842": "Color3.new(1, 0, 1)",
+            "Main|2.5, 0.30000001192092896, 2.5": "Color3.new(1, 0, 1)"
+        },
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "N",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "I",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 57.4475594, 1921.89026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "153.624",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "6.107",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "false",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 2, -19)"
+    },
+    {
+        "Colors": {
+            "Other|1.2999999523162842, 2.200000047683716, 1.2999999523162842": "Color3.new(1, 0, 1)",
+            "Main|2.5, 0.30000001192092896, 2.5": "Color3.new(0.333333, 1, 1)"
+        },
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "T",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "E",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 59.6475563, 1916.89026, 1, 0, 0, 0, 1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "433.1",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "20.868",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "true",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 2, -21)"
+    },
+    {
+        "Colors": {
+            "Other|1.2999999523162842, 2.200000047683716, 1.2999999523162842": "Color3.new(1, 0, 1)",
+            "Main|2.5, 0.30000001192092896, 2.5": "Color3.new(0.333333, 1, 1)"
+        },
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "E",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "M",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 59.6475563, 1911.89026, 1, 0, 0, 0, 1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "838.536",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "39.762",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "true",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 2, -23)"
+    },
+    {
+        "Colors": {
+            "Other|1.2999999523162842, 2.200000047683716, 1.2999999523162842": "Color3.new(1, 0, 1)",
+            "Main|2.5, 0.30000001192092896, 2.5": "Color3.new(0.333333, 0, 1)"
+        },
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "C",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "T",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 57.4475594, 1914.39026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "673.213",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "34.645",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "true",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "true",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 2, -22)"
+    },
+    {
+        "Colors": [],
+        "Name": "MotorBlock",
+        "KeyBinds": {
+            "Forward": {
+                "Value": "A",
+                "Type": "StringValue"
+            },
+            "Backward": {
+                "Value": "K",
+                "Type": "StringValue"
+            }
+        },
+        "ID": 12,
+        "CFrame": "CFrame.new(-1543.79919, 59.9475594, 1914.39026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Configuration": {
+            "Velocity": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "MaxTorque": {
+                "Value": "0",
+                "Type": "NumberValue"
+            },
+            "Lock": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Speed": {
+                "Value": "0",
+                "Type": "NumberValue"
+            },
+            "Powered": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Toggle": {
+                "Value": "false",
+                "Type": "BoolValue"
+            },
+            "Reset": {
+                "Value": "false",
+                "Type": "BoolValue"
+            }
+        },
+        "GridPosition": "Vector3.new(-19, 3, -22)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": {
+            "WedgeStd|2.5, 2.5, 2.5": "Color3.new(0, 0, 0)"
+        },
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 63.5475578, 1906.89026, 1, 0, 0, 0, 1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 4, -25)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": {
+            "WedgeStd|2.5, 2.5, 2.5": "Color3.new(0, 0, 0)"
+        },
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 63.5475578, 1921.89026, -1, 0, 0, 0, 1, 0, 0, 0, -1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 4, -19)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": {
+            "WedgeStd|2.5, 2.5, 2.5": "Color3.new(0, 0, 0)"
+        },
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 63.5475578, 1919.39026, -1, 0, 0, 0, -1, 0, 0, 0, 1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 4, -20)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": {
+            "WedgeStd|2.5, 2.5, 2.5": "Color3.new(0, 0, 0)"
+        },
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 63.5475578, 1909.39026, 1, 0, 0, 0, -1, 0, 0, 0, -1)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 4, -24)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": {
+            "WedgeStd|2.5, 2.5, 2.5": "Color3.new(1, 1, 1)"
+        },
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 66.0475616, 1909.39026, -1, 0, -0, 0, 0, -1, 0, -1, -0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 5, -24)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": [],
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 66.0475616, 1911.89026, -1, 0, 0, 0, 0, 1, 0, 1, -0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 5, -23)"
+    },
+    {
+        "Name": "WedgeStd",
+        "Colors": [],
+        "ID": 7,
+        "CFrame": "CFrame.new(-1543.79919, 66.0475616, 1916.89026, 1, 0, -0, 0, 0, 1, 0, -1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 5, -21)"
+    },
+    {
+        "Name": "BlockStd",
+        "Colors": {
+            "BlockStd|2.5, 2.5, 2.5": "Color3.new(0.992157, 0.611765, 0.227451)"
+        },
+        "ID": 1,
+        "CFrame": "CFrame.new(-1543.79919, 66.0475616, 1914.39026, 0, 0, 1, -1, 0, 0, 0, -1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 5, -22)"
+    },
+    {
+        "Name": "Cylinder",
+        "Colors": {
+            "Part|2.5, 2.5, 2.5": "Color3.new(0.992157, 0.611765, 0.227451)"
+        },
+        "ID": 78,
+        "CFrame": "CFrame.new(-1543.79919, 68.5475616, 1914.39026, 0, 0, 1, -1, 0, 0, 0, -1, 0)",
+        "Material": "",
+        "GridPosition": "Vector3.new(-19, 6, -22)"
+    }
+    
+]

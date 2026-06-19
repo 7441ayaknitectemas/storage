@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenModel Builds</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117; color: #c9d1d9; padding: 2rem; min-height: 100vh;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #58a6ff; }
+    .subtitle { color: #8b949e; margin-bottom: 2rem; font-size: 0.95rem; }
+    .stats { display: flex; gap: 1.5rem; margin-bottom: 2rem; }
+    .stat { background: #161b22; padding: 1rem 1.5rem; border-radius: 8px; border: 1px solid #30363d; }
+    .stat-value { font-size: 1.5rem; font-weight: 600; color: #58a6ff; }
+    .stat-label { font-size: 0.85rem; color: #8b949e; margin-top: 0.25rem; }
+    .search-box {
+      width: 100%; padding: 0.75rem 1rem; font-size: 1rem;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      color: #c9d1d9; margin-bottom: 1.5rem; outline: none;
+    }
+    .search-box:focus { border-color: #58a6ff; }
+    .build-grid { display: grid; gap: 0.75rem; }
+    .build-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 1rem 1.25rem; display: flex; align-items: center;
+      justify-content: space-between; transition: border-color 0.2s;
+    }
+    .build-card:hover { border-color: #58a6ff; }
+    .build-name {
+      font-size: 1.05rem; font-weight: 500; display: flex; align-items: center; gap: 0.75rem;
+    }
+    .build-size {
+      font-size: 0.8rem; color: #8b949e; background: #0d1117;
+      padding: 0.2rem 0.6rem; border-radius: 4px;
+    }
+    .download-btn {
+      padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 500;
+      background: #238636; color: #fff; border: none; border-radius: 6px;
+      cursor: pointer; text-decoration: none; transition: background 0.2s;
+    }
+    .download-btn:hover { background: #2ea043; }
+    .api-link {
+      display: inline-block; margin-top: 2rem; color: #58a6ff;
+      font-size: 0.85rem; text-decoration: none;
+    }
+    .api-link:hover { text-decoration: underline; }
+    .loading { text-align: center; padding: 3rem; color: #8b949e; }
+    .error { text-align: center; padding: 3rem; color: #f85149; }
+    #lua-modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 100;
+    }
+    #lua-modal.active { display: flex; }
+    .modal-content {
+      background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      padding: 2rem; max-width: 600px; width: 90%; position: relative;
+    }
+    .modal-content h2 { margin-bottom: 1rem; color: #58a6ff; }
+    .modal-content pre {
+      background: #0d1117; padding: 1rem; border-radius: 8px;
+      overflow-x: auto; font-size: 0.85rem; line-height: 1.5;
+    }
+    .close-btn {
+      position: absolute; top: 1rem; right: 1rem; background: none;
+      border: none; color: #8b949e; font-size: 1.5rem; cursor: pointer;
+    }
+    .close-btn:hover { color: #c9d1d9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OpenModel Builds</h1>
+    <p class="subtitle">Vehicle model builds for OpenModel — ready to download</p>
+
+    <div class="stats" id="stats"></div>
+
+    <input type="text" class="search-box" id="search" placeholder="Search builds..." oninput="filterBuilds()">
+
+    <div id="loading" class="loading">Loading builds...</div>
+    <div id="error" class="error" style="display:none"></div>
+    <div class="build-grid" id="build-list"></div>
+
+    <a class="api-link" href="builds.json" target="_blank">View API (builds.json)</a>
+    &middot;
+    <a class="api-link" href="#" onclick="showLuaModal(); return false;">Lua client example</a>
+  </div>
+
+  <div id="lua-modal">
+    <div class="modal-content">
+      <button class="close-btn" onclick="closeLuaModal()">&times;</button>
+      <h2>Lua Client Example</h2>
+      <p style="color:#8b949e; margin-bottom:1rem;">Fetches all builds from the API, then downloads each one.</p>
+      <pre>-- Luau / Roblox version
+local HttpService = game:GetService("HttpService")
+
+local API_URL = "https://sarhossamet1.github.io/storage/builds.json"
+
+-- Step 1: get all available builds
+local response = HttpService:GetAsync(API_URL)
+local data = HttpService:JSONDecode(response)
+
+print("Found " .. data.total .. " builds:")
+
+-- Step 2: download each build
+for _, build in ipairs(data.builds) do
+    print("Downloading: " .. build.name)
+    local json = HttpService:GetAsync(build.url)
+    -- save / process the build data here
+    print("  Done (" .. build.size .. " bytes)")
+end</pre>
+    </div>
+  </div>
+
+  <script>
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    let builds = [];
+
+    async function loadBuilds() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const list = document.getElementById('build-list');
+      const stats = document.getElementById('stats');
+
+      try {
+        const res = await fetch('builds.json');
+        if (!res.ok) throw new Error('Failed to fetch builds.json');
+        const data = await res.json();
+        builds = data.builds;
+
+        stats.innerHTML = `
+          <div class="stat"><div class="stat-value">${data.total}</div><div class="stat-label">Total Builds</div></div>
+          <div class="stat"><div class="stat-value">${formatSize(data.total_size || 0)}</div><div class="stat-label">Total Size</div></div>
+        `;
+
+        loading.style.display = 'none';
+        renderBuilds(builds);
+      } catch (e) {
+        loading.style.display = 'none';
+        error.style.display = 'block';
+        error.textContent = 'Error loading builds: ' + e.message;
+      }
+    }
+
+    function renderBuilds(items) {
+      const list = document.getElementById('build-list');
+      list.innerHTML = items.map(b => `
+        <div class="build-card">
+          <div class="build-name">
+            <span>${b.name}</span>
+            <span class="build-size">${formatSize(b.size)}</span>
+          </div>
+          <a class="download-btn" href="${b.url}" target="_blank" download>Download</a>
+        </div>
+      `).join('');
+    }
+
+    function filterBuilds() {
+      const q = document.getElementById('search').value.toLowerCase();
+      const filtered = builds.filter(b => b.name.toLowerCase().includes(q));
+      renderBuilds(filtered);
+    }
+
+    function showLuaModal() {
+      document.getElementById('lua-modal').classList.add('active');
+    }
+
+    function closeLuaModal() {
+      document.getElementById('lua-modal').classList.remove('active');
+    }
+
+    document.getElementById('lua-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeLuaModal();
+    });
+
+    loadBuilds();
+  </script>
+</body>
+</html>

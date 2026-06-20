@@ -1,8 +1,8 @@
 {
   "repo": "7441ayaknitectemas/storage",
-  "updated": "2026-06-19T22:29:45Z",
-  "total": 17,
-  "total_size": 11713747,
+  "updated": "2026-06-20T19:10:52Z",
+  "total": 19,
+  "total_size": 12772365,
   "builds": [
     {
       "name": "!10kblock",
@@ -69,6 +69,18 @@
       "filename": "!wings.json",
       "size": 30939,
       "url": "https://raw.githubusercontent.com/7441ayaknitectemas/storage/main/builds/!wings.json"
+    },
+    {
+      "name": "armedtruck",
+      "filename": "armedtruck.json",
+      "size": 171628,
+      "url": "https://raw.githubusercontent.com/7441ayaknitectemas/storage/main/builds/armedtruck.json"
+    },
+    {
+      "name": "crane",
+      "filename": "crane.json",
+      "size": 886990,
+      "url": "https://raw.githubusercontent.com/7441ayaknitectemas/storage/main/builds/crane.json"
     },
     {
       "name": "mibombo",

@@ -1,14 +1,20 @@
 {
   "repo": "7441ayaknitectemas/storage",
-  "updated": "2026-06-20T19:10:52Z",
-  "total": 19,
-  "total_size": 12772365,
+  "updated": "2026-06-27T10:29:50Z",
+  "total": 20,
+  "total_size": 14716798,
   "builds": [
     {
       "name": "!10kblock",
       "filename": "!10kblock.json",
       "size": 2427042,
       "url": "https://raw.githubusercontent.com/7441ayaknitectemas/storage/main/builds/!10kblock.json"
+    },
+    {
+      "name": "!5kconnectedsmallpart",
+      "filename": "!5kconnectedsmallpart.json",
+      "size": 1944433,
+      "url": "https://raw.githubusercontent.com/7441ayaknitectemas/storage/main/builds/!5kconnectedsmallpart.json"
     },
     {
       "name": "!brock",

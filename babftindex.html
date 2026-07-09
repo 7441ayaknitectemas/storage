@@ -229,11 +229,15 @@
     <div class="stat-box"><div class="stat-label">Types</div><div class="stat-value" id="stat-types">0</div></div>
     <div class="stat-box"><div class="stat-label">Selected</div><div class="stat-value" id="stat-selected">0</div></div>
   </div>
+  <div class="stat-row">
+    <div class="stat-box" style="flex:2"><div class="stat-label">Expected Blocks (max 2.5 studs)</div><div class="stat-value" id="stat-blocks">0</div></div>
+  </div>
 
   <!-- === SELECTION INFO PANEL === -->
   <div id="sel-panel">
     <div class="section-title">Selection Info</div>
     <div class="sel-row"><span class="sel-lbl">Type:</span><span id="sel-type-name">-</span></div>
+    <div class="sel-row"><span class="sel-lbl">Exp. Blocks:</span><span id="sel-exp-blocks" style="color:#e94560; font-weight:600;">-</span></div>
     <div class="sel-row">
       <span class="sel-lbl">Color:</span>
       <input type="color" id="sel-color-picker" value="#ffffff">
@@ -389,6 +393,37 @@ function radToDegStr(euler) {
 }
 
 // ========================================================================
+//  EXPANDED BLOCK COUNT (max 2.5 studs per axis)
+// ========================================================================
+
+const MAX_STUD = 2.5;
+
+function splitAxis(total) {
+  const pieces = [];
+  let rem = total;
+  while (rem > 0.001) {
+    const chunk = Math.min(MAX_STUD, rem);
+    pieces.push(chunk);
+    rem = rem - chunk;
+  }
+  if (pieces.length === 0) pieces.push(Math.max(0.1, total));
+  return pieces;
+}
+
+function getExpandedCount(size) {
+  const xPieces = splitAxis(size.x);
+  const yPieces = splitAxis(size.y);
+  const zPieces = splitAxis(size.z);
+  return xPieces.length * yPieces.length * zPieces.length;
+}
+
+function getPartExpandedCount(part) {
+  const size = parseVec3(part.Size);
+  if (!size) return 1;
+  return getExpandedCount(size);
+}
+
+// ========================================================================
 //  MODEL PARSING
 // ========================================================================
 
@@ -520,6 +555,7 @@ const errorEl = document.getElementById('error-msg');
 const statParts = document.getElementById('stat-parts');
 const statTypes = document.getElementById('stat-types');
 const statSelected = document.getElementById('stat-selected');
+const statBlocks = document.getElementById('stat-blocks');
 const wireBtn = document.getElementById('toggle-wireframe');
 const btnDelete = document.getElementById('btn-delete');
 const btnSave = document.getElementById('btn-save');
@@ -529,6 +565,7 @@ const marqueeBox = document.getElementById('marquee-box');
 // Selection panel
 const selPanel = document.getElementById('sel-panel');
 const selTypeName = document.getElementById('sel-type-name');
+const selExpBlocks = document.getElementById('sel-exp-blocks');
 const selColorPicker = document.getElementById('sel-color-picker');
 const selColorHex = document.getElementById('sel-color-hex');
 const selRoughness = document.getElementById('sel-roughness');
@@ -587,6 +624,8 @@ function clearModel() {
   currentModelInfo = null;
   hiddenTypes.clear();
   statParts.textContent = '0';
+  statTypes.textContent = '0';
+  statBlocks.textContent = '0';
   btnSave.disabled = true;
   selPanel.classList.remove('show');
   visList.innerHTML = '';
@@ -798,6 +837,16 @@ function updateSelectionPanel() {
   } else {
     selTypeName.textContent = `${types.size} types (${selectedMeshes.size} parts)`;
   }
+
+  // Expanded block count for selected parts
+  let totalExpanded = 0;
+  for (const m of selectedMeshes) {
+    const i = m.userData.partIndex;
+    if (i !== undefined && currentModelInfo.parts[i]) {
+      totalExpanded += getPartExpandedCount(currentModelInfo.parts[i]);
+    }
+  }
+  selExpBlocks.textContent = totalExpanded.toLocaleString();
 
   // Color
   const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
@@ -1171,11 +1220,13 @@ function rebuildStats() {
   if (!currentModelInfo) return;
 
   const counts = {};
+  const expandedCounts = {};
   let total = 0;
   for (const p of currentModelInfo.parts) {
     const hidden = hiddenTypes.has(p._type);
     const key = hidden ? `${p._type} (hidden)` : p._type;
     counts[p._type] = (counts[p._type] || 0) + 1;
+    expandedCounts[p._type] = (expandedCounts[p._type] || 0) + getPartExpandedCount(p);
     if (!hidden) total++;
   }
 
@@ -1188,10 +1239,12 @@ function rebuildStats() {
   for (const [type, cnt] of sorted) {
     const pct = ((cnt / grandTotal) * 100).toFixed(1);
     const hidden = hiddenTypes.has(type);
+    const exp = expandedCounts[type] || 0;
     html += `<div class="stat-item">
       <span class="st-type" style="${hidden ? 'opacity:0.35' : ''}">${type}</span>
       <span><span class="st-num">${cnt}</span>
-      <span class="st-pct">${pct}%</span></span>
+      <span class="st-pct">${pct}%</span>
+      <span class="st-pct" style="color:#e94560; margin-left:4px;">(${exp.toLocaleString()} blocks)</span></span>
     </div>`;
   }
 
@@ -1207,6 +1260,13 @@ function updateStatsNumbers() {
   statTypes.textContent = types.size;
 
   statSelected.textContent = selectedMeshes.size;
+
+  // Calculate total expanded blocks
+  let totalExpanded = 0;
+  for (const p of currentModelInfo.parts) {
+    totalExpanded += getPartExpandedCount(p);
+  }
+  statBlocks.textContent = totalExpanded.toLocaleString();
 }
 
 // ========================================================================

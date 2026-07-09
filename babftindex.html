@@ -215,9 +215,9 @@
   <!-- ============ DRAG & DROP ZONE ============ -->
   <div id="drop-zone">
     <div class="drop-zone-icon">&#128194;</div>
-    <div class="drop-zone-text">Drop .json file here</div>
+    <div class="drop-zone-text">Drop .json or .build file here</div>
     <div class="drop-zone-sub">or <span id="browse-link">browse</span></div>
-    <input type="file" id="file-input" accept=".json" style="display:none">
+    <input type="file" id="file-input" accept=".json,.build" style="display:none">
   </div>
   <div id="drop-status"></div>
 
@@ -1383,11 +1383,15 @@ function handleFile(file) {
   dropStatus.style.display = 'none';
 
   // Validate file type
-  if (!file.name.toLowerCase().endsWith('.json')) {
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (ext !== 'json' && ext !== 'build') {
     dropStatus.className = 'error';
-    dropStatus.textContent = 'Error: Only .json files are supported';
+    dropStatus.textContent = 'Error: Only .json and .build files are supported';
     return;
   }
+
+  // Show loading
+  canvasLoading.classList.remove('hidden');
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -1407,17 +1411,22 @@ function handleFile(file) {
       // Update select dropdown to show custom file
       selectEl.value = '';
 
+      // Hide loading overlay
+      canvasLoading.classList.add('hidden');
+
       // Show success
       dropStatus.className = 'success';
       dropStatus.textContent = 'Loaded: ' + file.name;
 
     } catch (err) {
+      canvasLoading.classList.add('hidden');
       dropStatus.className = 'error';
       dropStatus.textContent = 'Error: ' + err.message;
     }
   };
 
   reader.onerror = () => {
+    canvasLoading.classList.add('hidden');
     dropStatus.className = 'error';
     dropStatus.textContent = 'Error reading file';
   };

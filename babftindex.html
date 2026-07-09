@@ -24,12 +24,6 @@
   #sidebar .subtitle { font-size: 11px; color: #666; margin-bottom: 14px; }
 
   #sidebar label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #777; margin-bottom: 4px; display: block; }
-  #model-select {
-    width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #0f3460;
-    background: #1a1a2e; color: #eee; font-size: 13px; margin-bottom: 12px;
-    cursor: pointer; outline: none;
-  }
-  #model-select:hover, #model-select:focus { border-color: #e94560; }
 
   .stat-row {
     display: flex; gap: 6px; margin-bottom: 10px;
@@ -207,16 +201,6 @@
 <div id="sidebar">
   <h1>&#9881; Model Editor</h1>
   <div class="subtitle">Select &bull; Move &bull; Rotate &bull; Delete</div>
-
-  <label for="model-select">Model</label>
-  <select id="model-select">
-    <option value="">-- Choose a model --</option>
-    <option value="DumbBike.json">DumbBike</option>
-    <option value="Halo.json">Halo</option>
-    <option value="s13.json">s13</option>
-	<option value="s14.json">s14</option>
-    <option value="supra.json">Supra</option>
-  </select>
 
   <!-- ============ DRAG & DROP ZONE ============ -->
   <div id="drop-zone">
@@ -555,7 +539,6 @@ const hiddenTypes = new Set();  // block types that are hidden
 //  DOM REFS
 // ========================================================================
 
-const selectEl = document.getElementById('model-select');
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error-msg');
 const statParts = document.getElementById('stat-parts');
@@ -1346,11 +1329,6 @@ window.addEventListener('blur', () => { keysDown.clear(); });
 //  UI EVENT HANDLERS
 // ========================================================================
 
-selectEl.addEventListener('change', () => {
-  clearSelection();
-  loadModel(selectEl.value);
-});
-
 wireBtn.addEventListener('click', () => {
   isWireframe = !isWireframe;
   wireBtn.textContent = isWireframe ? '\u2694 Wire' : '\u2694 Wire';
@@ -1473,9 +1451,6 @@ function handleFile(file) {
       hiddenTypes.clear();
       buildScene(info.parts);
       rebuildUI();
-
-      // Update select dropdown to show custom file
-      selectEl.value = '';
 
       // Hide loading overlay
       canvasLoading.classList.add('hidden');

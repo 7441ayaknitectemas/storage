@@ -185,6 +185,12 @@
   #drop-status.success { display: block; background: #1a2e1a; border: 1px solid #2ea043; color: #3fb950; }
   #drop-status.error { display: block; background: #2a1515; border: 1px solid #e94560; color: #ff6b6b; }
 
+  #copy-status {
+    display: none; padding: 6px 8px; border-radius: 6px; font-size: 11px;
+    margin-bottom: 6px; text-align: center;
+  }
+  #copy-status.show { display: block; background: #1a2e1a; border: 1px solid #2ea043; color: #3fb950; }
+
   /* scrollbar styling */
   #vis-list::-webkit-scrollbar, #stats-wrap::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
   #vis-list::-webkit-scrollbar-track, #stats-wrap::-webkit-scrollbar-track, #sidebar::-webkit-scrollbar-track { background: #1a1a2e; }
@@ -265,6 +271,12 @@
     <button class="sidebar-btn" id="toggle-wireframe" style="flex:1">&#9874; Wire</button>
   </div>
   <button class="sidebar-btn primary" id="btn-save" disabled>&#128190; Save Modified JSON</button>
+
+  <div class="btn-row">
+    <button class="sidebar-btn" id="btn-copy-s1" disabled style="flex:1">&#128203; Copy Script 1</button>
+    <button class="sidebar-btn" id="btn-copy-s2" disabled style="flex:1">&#128203; Copy Script 2</button>
+  </div>
+  <div id="copy-status"></div>
 
   <!-- === VISIBILITY === -->
   <div class="section-title">Visibility by Type</div>
@@ -548,6 +560,9 @@ const statBlocks = document.getElementById('stat-blocks');
 const wireBtn = document.getElementById('toggle-wireframe');
 const btnDelete = document.getElementById('btn-delete');
 const btnSave = document.getElementById('btn-save');
+const btnCopyS1 = document.getElementById('btn-copy-s1');
+const btnCopyS2 = document.getElementById('btn-copy-s2');
+const copyStatus = document.getElementById('copy-status');
 const canvasLoading = document.getElementById('canvas-loading');
 const marqueeBox = document.getElementById('marquee-box');
 
@@ -616,6 +631,8 @@ function clearModel() {
   statTypes.textContent = '0';
   statBlocks.textContent = '0';
   btnSave.disabled = true;
+  btnCopyS1.disabled = true;
+  btnCopyS2.disabled = true;
   selPanel.classList.remove('show');
   visList.innerHTML = '';
   statsWrap.innerHTML = '';
@@ -792,6 +809,8 @@ function updateSelectionUI() {
   statSelected.textContent = n;
   btnDelete.disabled = n === 0;
   btnSave.disabled = !currentModelInfo;
+  btnCopyS1.disabled = !currentModelInfo;
+  btnCopyS2.disabled = !currentModelInfo;
 }
 
 // ========================================================================
@@ -1474,6 +1493,441 @@ function handleFile(file) {
 
   reader.readAsText(file);
 }
+
+// ========================================================================
+//  COPY SCRIPTS TO CLIPBOARD
+// ========================================================================
+
+const SCRIPT1_TEMPLATE = `local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local aircraft = workspace:WaitForChild("PIayerAircraft"):WaitForChild(player.Name)
+local UpdateValue = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("UpdateValue")
+local remoteFolder = game:GetService("ReplicatedStorage").Remotes
+local paintRemote = nil
+
+for _, remote in pairs(remoteFolder:GetDescendants()) do
+    if remote:IsA("RemoteFunction") and remote:FindFirstChild("paintRemote") then
+        paintRemote = remote
+        break
+    end
+end
+
+if not paintRemote then
+    warn("Paint remote not found!")
+    return
+end
+
+local MATERIAL_MAP = {
+    GlassBlock    = "g",
+    MetalBlock    = "m",
+    PlasticBlock  = "Default",
+    WoodBlock     = "w",
+    FabricBlock   = "f",
+    CoalBlock     = "t",
+    TitaniumBlock = "m",
+    JetPackUltra  = "m",
+}
+
+local function getMatCode(blockType, transparency)
+    transparency = tonumber(transparency) or 0
+    if blockType == "GlassBlock" then
+        if transparency == 0 then return "m" else return "g" end
+    elseif blockType == "PlasticBlock" then
+        if transparency == 1 then return "g" else return "Default" end
+    end
+    return MATERIAL_MAP[blockType]
+end
+
+local data = HttpService:JSONDecode([===[%DATA%]===])
+
+local blocks = {}
+local source = (type(data) == "table" and data[2]) or (type(data) == "table" and data[1]) or data
+
+if type(source) == "table" then
+    for blockType, blockList in pairs(source) do
+        if type(blockList) == "table" then
+            for _, block in ipairs(blockList) do
+                if type(block) == "table" then
+                    block._blockType = blockType
+                    table.insert(blocks, block)
+                end
+            end
+        end
+    end
+end
+
+local function parseVec3(str)
+    local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
+    return Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+end
+
+local function parseColor(str)
+    local r, g, b = str:match("([^,]+),([^,]+),([^,]+)")
+    return Color3.new(tonumber(r), tonumber(g), tonumber(b))
+end
+
+local function toGrid(studs)
+    return math.clamp(studs / 2.5, 0.04, 1)
+end
+
+local function splitAxis(total)
+    local pieces = {}
+    local rem = total
+    while rem > 0.001 do
+        local chunk = math.min(2.5, rem)
+        table.insert(pieces, chunk)
+        rem = rem - chunk
+    end
+    if #pieces == 0 then pieces = {math.max(0.1, total)} end
+    return pieces
+end
+
+local function calcOffsets(pieces, total)
+    local offsets = {}
+    local cursor = -total / 2
+    for _, p in ipairs(pieces) do
+        table.insert(offsets, cursor + p / 2)
+        cursor = cursor + p
+    end
+    return offsets
+end
+
+local function expandBlocks(inputBlocks)
+    local result = {}
+    for _, block in ipairs(inputBlocks) do
+        if type(block) ~= "table" or not block.Size then
+            table.insert(result, block)
+            continue
+        end
+        local size = parseVec3(block.Size)
+        local hasPos = block.Position ~= nil
+        local pos = hasPos and parseVec3(block.Position) or Vector3.new(0, 0, 0)
+        local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+        local xPieces = splitAxis(size.X)
+        local yPieces = splitAxis(size.Y)
+        local zPieces = splitAxis(size.Z)
+        if #xPieces == 1 and #yPieces == 1 and #zPieces == 1 then
+            table.insert(result, block)
+            continue
+        end
+        local xOff = calcOffsets(xPieces, size.X)
+        local yOff = calcOffsets(yPieces, size.Y)
+        local zOff = calcOffsets(zPieces, size.Z)
+        local rotCF = CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+        for ix, xSize in ipairs(xPieces) do
+            for iy, ySize in ipairs(yPieces) do
+                for iz, zSize in ipairs(zPieces) do
+                    local localOffset = Vector3.new(xOff[ix], yOff[iy], zOff[iz])
+                    local worldOffset = rotCF:VectorToWorldSpace(localOffset)
+                    local subPos = pos + worldOffset
+                    local sub = {}
+                    for k, v in pairs(block) do sub[k] = v end
+                    sub.Size = string.format("%s,%s,%s", xSize, ySize, zSize)
+                    if hasPos then
+                        sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
+                    end
+                    table.insert(result, sub)
+                end
+            end
+        end
+    end
+    return result
+end
+
+local smallParts = {}
+for _, obj in ipairs(aircraft:GetDescendants()) do
+    if obj.Name == "SmallPart" and obj:IsA("Model") then
+        table.insert(smallParts, obj)
+    end
+end
+
+local expandedBlocks = expandBlocks(blocks)
+
+print(string.format("SmallParts found: %d", #smallParts))
+print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, #expandedBlocks))
+
+if #expandedBlocks > #smallParts then
+    warn(string.format("Need %d parts but only %d available - %d sub-blocks will be skipped!",
+        #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
+end
+
+local count = math.min(#expandedBlocks, #smallParts)
+print("Configuring", count, "parts...")
+
+for i = 1, count do
+    local block = expandedBlocks[i]
+    if type(block) ~= "table" or not block.Size then continue end
+    local size = parseVec3(block.Size)
+    local cfg = smallParts[i]:WaitForChild("Configuration")
+    UpdateValue:FireServer(toGrid(size.X), cfg:WaitForChild("Size X"))
+    UpdateValue:FireServer(toGrid(size.Y), cfg:WaitForChild("Size Y"))
+    UpdateValue:FireServer(toGrid(size.Z), cfg:WaitForChild("Size Z"))
+end
+
+local typeCounts = {}
+for i = 1, count do
+    local block = expandedBlocks[i]
+    if type(block) ~= "table" then continue end
+    local bt = block._blockType or "Unknown"
+    typeCounts[bt] = (typeCounts[bt] or 0) + 1
+end
+
+for blockType, amount in pairs(typeCounts) do
+    local defaultMatCode = MATERIAL_MAP[blockType] or "none"
+    print(string.format("* found %d %s on original build (default mapped to %s)", amount, blockType, defaultMatCode))
+end
+
+local threads = {}
+for i = 1, count do
+    local block = expandedBlocks[i]
+    if type(block) ~= "table" then continue end
+    local spart = smallParts[i]:FindFirstChild("SPart")
+    local color = block.Color and parseColor(block.Color) or nil
+    local matCode = getMatCode(block._blockType, block.Transparency)
+    task.spawn(function()
+        if color and spart then
+            paintRemote:InvokeServer(spart, color)
+        end
+        if matCode then
+            paintRemote:InvokeServer(smallParts[i], matCode)
+        end
+    end)
+end
+
+for _, t in ipairs(threads) do
+    coroutine.resume(t)
+end
+
+print("Done! Configured", count, "SmallParts.")`;
+
+const SCRIPT2_TEMPLATE = `local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
+
+local myplot = getMySpawnedPlot()
+
+for i,v in pairs(myplot:GetDescendants()) do
+    if v.Name == "BlockStd" and (v.Parent.Name == "BlockBeam2" or v.Parent.Name == "BlockBeam" or v.Parent.Name == "BlockStd") then
+    end
+end
+
+for i,v in pairs(myplot:GetDescendants()) do
+    if v.Name == "SPart" then
+        Unweld(v)
+    end
+end
+
+task.wait(2)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
+
+local myplot = getMySpawnedPlot()
+
+Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
+local player = Players.LocalPlayer
+local pname = player.Name
+
+local aircraft = workspace[pname .. " Aircraft"]
+local anchorBase = aircraft.HalfPlate.BlockStd
+
+local data = HttpService:JSONDecode([===[%DATA%]===])
+
+local blocks = {}
+local source = (type(data) == "table" and data[2]) or (type(data) == "table" and data[1]) or data
+
+if type(source) == "table" then
+    for blockType, blockList in pairs(source) do
+        if type(blockList) == "table" then
+            for _, block in ipairs(blockList) do
+                if type(block) == "table" then
+                    block._blockType = blockType
+                    table.insert(blocks, block)
+                end
+            end
+        end
+    end
+end
+
+local function parseVec3(str)
+    local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
+    return Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+end
+
+local function splitAxis(total)
+    local pieces = {}
+    local rem = total
+    while rem > 0.001 do
+        local chunk = math.min(2.5, rem)
+        table.insert(pieces, chunk)
+        rem = rem - chunk
+    end
+    if #pieces == 0 then pieces = {math.max(0.1, total)} end
+    return pieces
+end
+
+local function calcOffsets(pieces, total)
+    local offsets = {}
+    local cursor = -total / 2
+    for _, p in ipairs(pieces) do
+        table.insert(offsets, cursor + p / 2)
+        cursor = cursor + p
+    end
+    return offsets
+end
+
+local function expandBlocks(inputBlocks)
+    local result = {}
+    for _, block in ipairs(inputBlocks) do
+        if type(block) ~= "table" or not block.Position or not block.Size then
+            table.insert(result, block)
+            continue
+        end
+        local pos  = parseVec3(block.Position)
+        local rot  = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+        local size = parseVec3(block.Size)
+        local xPieces = splitAxis(size.X)
+        local yPieces = splitAxis(size.Y)
+        local zPieces = splitAxis(size.Z)
+        if #xPieces == 1 and #yPieces == 1 and #zPieces == 1 then
+            table.insert(result, block)
+            continue
+        end
+        local xOff = calcOffsets(xPieces, size.X)
+        local yOff = calcOffsets(yPieces, size.Y)
+        local zOff = calcOffsets(zPieces, size.Z)
+        local rotCF = CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+        for ix, xSize in ipairs(xPieces) do
+            for iy, ySize in ipairs(yPieces) do
+                for iz, zSize in ipairs(zPieces) do
+                    local localOffset = Vector3.new(xOff[ix], yOff[iy], zOff[iz])
+                    local worldOffset = rotCF:VectorToWorldSpace(localOffset)
+                    local subPos      = pos + worldOffset
+                    local sub = {}
+                    for k, v in pairs(block) do sub[k] = v end
+                    sub.Size     = string.format("%s,%s,%s", xSize, ySize, zSize)
+                    sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
+                    table.insert(result, sub)
+                end
+            end
+        end
+    end
+    return result
+end
+
+local smallParts = {}
+for _, obj in ipairs(aircraft:GetDescendants()) do
+    if obj.Name == "SmallPart" and obj:IsA("Model") then
+        local part = obj:FindFirstChild("SPart")
+        part.CanCollide = false
+        if part then table.insert(smallParts, part) end
+    end
+end
+
+local expandedBlocks = expandBlocks(blocks)
+
+print(string.format("SmallParts found: %d", #smallParts))
+print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, #expandedBlocks))
+
+if #expandedBlocks > #smallParts then
+    warn(string.format("Need %d parts but only %d available - %d sub-blocks will be skipped!",
+        #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
+end
+
+local centroid = Vector3.zero
+local validCount = 0
+for _, block in ipairs(blocks) do
+    if type(block) == "table" and block.Position then
+        centroid += parseVec3(block.Position)
+        validCount += 1
+    end
+end
+if validCount > 0 then centroid /= validCount end
+
+local count = math.min(#expandedBlocks, #smallParts)
+print("Welding", count, "parts...")
+
+for i = 1, count do
+    local block = expandedBlocks[i]
+    if type(block) ~= "table" or not block.Position then continue end
+    local pos = parseVec3(block.Position)
+    local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+    local worldCF   = CFrame.new(pos) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+    local shiftedCF = CFrame.new(anchorBase.Position - centroid) * worldCF
+    local offset    = anchorBase.CFrame:ToObjectSpace(anchorBase.CFrame * anchorBase.CFrame:ToObjectSpace(shiftedCF))
+    ReplicatedStorage.BlockRemotes.MotorLock:FireServer(
+        "MotorWeld",
+        anchorBase,
+        true,
+        anchorBase,
+        smallParts[i],
+        offset,
+        true
+    )
+end
+
+print("Done! Welded", count, "parts.")`;
+
+function buildExportJSON() {
+  if (!currentModelInfo) return null;
+
+  const { format, typeOrder, parts } = currentModelInfo;
+
+  // Sync mesh data back to _data objects
+  for (const p of parts) {
+    const mesh = p._mesh;
+    if (!mesh) continue;
+    p._data.Position = vec3ToStr(mesh.position);
+    p._data.Rotation = radToDegStr(mesh.rotation);
+  }
+
+  // Group by type
+  const grouped = {};
+  for (const type of typeOrder) grouped[type] = [];
+  for (const p of parts) {
+    if (!grouped[p._type]) grouped[p._type] = [];
+    grouped[p._type].push(p._data);
+  }
+
+  let output;
+  if (format === 'array-tuple') {
+    const activeTypes = typeOrder.filter(t => grouped[t].length > 0);
+    output = [activeTypes, grouped];
+  } else {
+    output = {};
+    for (const type of typeOrder) {
+      if (grouped[type].length > 0) {
+        output[type] = grouped[type];
+      }
+    }
+  }
+
+  return JSON.stringify(output);
+}
+
+function copyScriptToClipboard(template) {
+  const json = buildExportJSON();
+  if (!json) return;
+
+  const script = template.replace('%DATA%', json);
+
+  navigator.clipboard.writeText(script).then(() => {
+    copyStatus.className = 'show';
+    copyStatus.textContent = 'Script copied to clipboard!';
+    setTimeout(() => { copyStatus.className = ''; copyStatus.style.display = 'none'; }, 2500);
+  }).catch(() => {
+    copyStatus.className = 'error';
+    copyStatus.style.display = 'block';
+    copyStatus.textContent = 'Failed to copy — try manually';
+    setTimeout(() => { copyStatus.className = ''; copyStatus.style.display = 'none'; }, 2500);
+  });
+}
+
+btnCopyS1.addEventListener('click', () => copyScriptToClipboard(SCRIPT1_TEMPLATE));
+btnCopyS2.addEventListener('click', () => copyScriptToClipboard(SCRIPT2_TEMPLATE));
 </script>
 </body>
 </html>

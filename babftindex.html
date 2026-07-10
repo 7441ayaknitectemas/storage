@@ -270,6 +270,7 @@
     <button class="sidebar-btn danger" id="btn-delete" disabled style="flex:1">&#128465; Delete</button>
     <button class="sidebar-btn" id="toggle-wireframe" style="flex:1">&#9874; Wire</button>
   </div>
+  <button class="sidebar-btn" id="toggle-transparent">&#9673; Show Transparent</button>
   <button class="sidebar-btn primary" id="btn-save" disabled>&#128190; Save Modified JSON</button>
 
   <div class="btn-row">
@@ -542,6 +543,7 @@ scene.add(grid);
 
 let modelGroup = null;
 let isWireframe = false;
+let showTransparent = false;
 let currentModelInfo = null;
 const selectedMeshes = new Set();
 const keysDown = new Set();
@@ -558,6 +560,7 @@ const statTypes = document.getElementById('stat-types');
 const statSelected = document.getElementById('stat-selected');
 const statBlocks = document.getElementById('stat-blocks');
 const wireBtn = document.getElementById('toggle-wireframe');
+const transparentBtn = document.getElementById('toggle-transparent');
 const btnDelete = document.getElementById('btn-delete');
 const btnSave = document.getElementById('btn-save');
 const btnCopyS1 = document.getElementById('btn-copy-s1');
@@ -671,8 +674,9 @@ function buildScene(parts) {
     const geom = new THREE.BoxGeometry(s.x, s.y, s.z);
 
     const color = parseColor(part.Color) || getDefaultColor(part._type);
-    const opacity = part.Transparency !== undefined ? Math.max(0.01, 1 - part.Transparency) : 1;
-    const transparent = opacity < 0.999;
+    const origOpacity = part.Transparency !== undefined ? Math.max(0.01, 1 - part.Transparency) : 1;
+    const opacity = showTransparent ? 1 : origOpacity;
+    const transparent = showTransparent ? false : opacity < 0.999;
 
     const mat = new THREE.MeshStandardMaterial({
       color,
@@ -1359,6 +1363,29 @@ wireBtn.addEventListener('click', () => {
         mats.forEach(m => { m.wireframe = isWireframe; m.needsUpdate = true; });
       }
     });
+  }
+});
+
+transparentBtn.addEventListener('click', () => {
+  showTransparent = !showTransparent;
+  transparentBtn.textContent = showTransparent ? '\u25C9 Hide Transparent' : '\u25C9 Show Transparent';
+  transparentBtn.classList.toggle('active', showTransparent);
+  if (modelGroup && currentModelInfo) {
+    for (const p of currentModelInfo.parts) {
+      if (!p._mesh || !p._mesh.material) continue;
+      const mat = Array.isArray(p._mesh.material) ? p._mesh.material[0] : p._mesh.material;
+      if (showTransparent) {
+        mat.opacity = 1;
+        mat.transparent = false;
+        mat.depthWrite = true;
+      } else {
+        const origOpacity = p.Transparency !== undefined ? Math.max(0.01, 1 - p.Transparency) : 1;
+        mat.opacity = origOpacity;
+        mat.transparent = origOpacity < 0.999;
+        mat.depthWrite = origOpacity >= 0.999;
+      }
+      mat.needsUpdate = true;
+    }
   }
 });
 

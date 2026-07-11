@@ -2028,14 +2028,14 @@ local function parseColor(str)
 end
 
 local function toGrid(studs)
-    return math.clamp(studs / 2.5, 0.04, 1)
+    return math.clamp(studs / 2, 0.04, 1)
 end
 
 local function splitAxis(total)
     local pieces = {}
     local rem = total
     while rem > 0.001 do
-        local chunk = math.min(2.5, rem)
+        local chunk = math.min(2, rem)
         table.insert(pieces, chunk)
         rem = rem - chunk
     end
@@ -2167,30 +2167,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
 
-local myplot = getMySpawnedPlot()
-
-for i,v in pairs(myplot:GetDescendants()) do
-    if v.Name == "BlockStd" and (v.Parent.Name == "BlockBeam2" or v.Parent.Name == "BlockBeam" or v.Parent.Name == "BlockStd") then
-    end
-end
-
-for i,v in pairs(myplot:GetDescendants()) do
-    if v.Name == "SPart" then
-        Unweld(v)
-    end
-end
-
-task.wait(2)
-loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
-
-local myplot = getMySpawnedPlot()
-
-Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
 local player = Players.LocalPlayer
 local pname = player.Name
-
 local aircraft = workspace[pname .. " Aircraft"]
-local anchorBase = aircraft.HalfPlate.BlockStd
 
 local data = HttpService:JSONDecode([===[%DATA%]===])
 
@@ -2219,7 +2198,7 @@ local function splitAxis(total)
     local pieces = {}
     local rem = total
     while rem > 0.001 do
-        local chunk = math.min(2.5, rem)
+        local chunk = math.min(2, rem)
         table.insert(pieces, chunk)
         rem = rem - chunk
     end
@@ -2280,8 +2259,10 @@ local smallParts = {}
 for _, obj in ipairs(aircraft:GetDescendants()) do
     if obj.Name == "SmallPart" and obj:IsA("Model") then
         local part = obj:FindFirstChild("SPart")
-        part.CanCollide = false
-        if part then table.insert(smallParts, part) end
+        if part then
+            part.CanCollide = false
+            table.insert(smallParts, part)
+        end
     end
 end
 
@@ -2295,6 +2276,21 @@ if #expandedBlocks > #smallParts then
         #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
 end
 
+local count = math.min(#expandedBlocks, #smallParts)
+
+for i = 1, count do
+    Unweld(smallParts[i])
+end
+
+task.wait(2)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
+
+local myplot = getMySpawnedPlot()
+
+Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
+
+local anchorBase = aircraft.HalfPlate.BlockStd
+
 local centroid = Vector3.zero
 local validCount = 0
 for _, block in ipairs(blocks) do
@@ -2305,7 +2301,6 @@ for _, block in ipairs(blocks) do
 end
 if validCount > 0 then centroid /= validCount end
 
-local count = math.min(#expandedBlocks, #smallParts)
 print("Welding", count, "parts...")
 
 for i = 1, count do

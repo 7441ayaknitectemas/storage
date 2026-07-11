@@ -1216,9 +1216,8 @@ function deleteSelected() {
 function saveModel() {
   if (!currentModelInfo) return;
 
-  const { format, typeOrder, parts, rawData, isV2Format, v2Metadata } = currentModelInfo;
+  const { typeOrder, parts } = currentModelInfo;
 
-  // Sync mesh data back to _data objects
   for (const p of parts) {
     const mesh = p._mesh;
     if (!mesh) continue;
@@ -1226,7 +1225,6 @@ function saveModel() {
     p._data.Rotation = radToDegStr(mesh.rotation);
   }
 
-  // Group by type
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
   for (const p of parts) {
@@ -1234,57 +1232,10 @@ function saveModel() {
     grouped[p._type].push(p._data);
   }
 
-  let output;
-  if (isV2Format) {
-    const blocks = {};
-    let idx = 1;
-    for (const type of typeOrder) {
-      if (grouped[type].length === 0) continue;
-      blocks[type] = grouped[type].map(item => {
-        const v2Item = { i: idx++ };
-        if (item.Position !== undefined) v2Item.p = item.Position;
-        if (item.Rotation !== undefined) v2Item.r = item.Rotation;
-        if (item.Size !== undefined) v2Item.sz = item.Size;
-        if (item.Color !== undefined) v2Item.cl = item.Color;
-        if (item.Transparency !== undefined) v2Item.t = item.Transparency;
-        if (item.ShowShadow !== undefined) v2Item.s = item.ShowShadow;
-        return v2Item;
-      });
-    }
-    output = {
-      v: (v2Metadata && v2Metadata.v) || 2,
-      lg: (v2Metadata && v2Metadata.lg) !== undefined ? v2Metadata.lg : true,
-      b: blocks
-    };
-
-    let fileContent = 'BuilderHub_\nJoin https://discord.gg/kKMmH3fyd3 to use this file\nBH2\n\n';
-    const totalBlocks = parts.length;
-    const blockTypeCounts = {};
-    for (const p of parts) { blockTypeCounts[p._type] = (blockTypeCounts[p._type] || 0) + 1; }
-    fileContent += `[BlocksNeeded]\nBlocksNeeded=${JSON.stringify({Total: totalBlocks, Count: totalBlocks, Blocks: blockTypeCounts})}\n\n`;
-    fileContent += `[Build]\nBuild=${JSON.stringify(output)}`;
-
-    const blob = new Blob([fileContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = currentModelInfo.fileName.replace(/\.[^.]+$/, '_modified.build');
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    return;
-  }
-
-  if (format === 'array-tuple') {
-    const activeTypes = typeOrder.filter(t => grouped[t].length > 0);
-    output = [activeTypes, grouped];
-  } else {
-    output = {};
-    for (const type of typeOrder) {
-      if (grouped[type].length > 0) {
-        output[type] = grouped[type];
-      }
+  const output = {};
+  for (const type of typeOrder) {
+    if (grouped[type].length > 0) {
+      output[type] = grouped[type];
     }
   }
 
@@ -1293,7 +1244,7 @@ function saveModel() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = currentModelInfo.fileName.replace('.json', '_modified.json');
+  a.download = currentModelInfo.fileName.replace(/\.[^.]+$/, '_modified.json');
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -2076,9 +2027,8 @@ print("Done! Welded", count, "parts.")`;
 function buildExportJSON() {
   if (!currentModelInfo) return null;
 
-  const { format, typeOrder, parts, isV2Format, v2Metadata } = currentModelInfo;
+  const { typeOrder, parts } = currentModelInfo;
 
-  // Sync mesh data back to _data objects
   for (const p of parts) {
     const mesh = p._mesh;
     if (!mesh) continue;
@@ -2086,7 +2036,6 @@ function buildExportJSON() {
     p._data.Rotation = radToDegStr(mesh.rotation);
   }
 
-  // Group by type
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
   for (const p of parts) {
@@ -2094,40 +2043,10 @@ function buildExportJSON() {
     grouped[p._type].push(p._data);
   }
 
-  let output;
-  if (isV2Format) {
-    const blocks = {};
-    let idx = 1;
-    for (const type of typeOrder) {
-      if (grouped[type].length === 0) continue;
-      blocks[type] = grouped[type].map(item => {
-        const v2Item = { i: idx++ };
-        if (item.Position !== undefined) v2Item.p = item.Position;
-        if (item.Rotation !== undefined) v2Item.r = item.Rotation;
-        if (item.Size !== undefined) v2Item.sz = item.Size;
-        if (item.Color !== undefined) v2Item.cl = item.Color;
-        if (item.Transparency !== undefined) v2Item.t = item.Transparency;
-        if (item.ShowShadow !== undefined) v2Item.s = item.ShowShadow;
-        return v2Item;
-      });
-    }
-    output = {
-      v: (v2Metadata && v2Metadata.v) || 2,
-      lg: (v2Metadata && v2Metadata.lg) !== undefined ? v2Metadata.lg : true,
-      b: blocks
-    };
-    return JSON.stringify(output);
-  }
-
-  if (format === 'array-tuple') {
-    const activeTypes = typeOrder.filter(t => grouped[t].length > 0);
-    output = [activeTypes, grouped];
-  } else {
-    output = {};
-    for (const type of typeOrder) {
-      if (grouped[type].length > 0) {
-        output[type] = grouped[type];
-      }
+  const output = {};
+  for (const type of typeOrder) {
+    if (grouped[type].length > 0) {
+      output[type] = grouped[type];
     }
   }
 

@@ -196,6 +196,16 @@
   #vis-list::-webkit-scrollbar-track, #stats-wrap::-webkit-scrollbar-track, #sidebar::-webkit-scrollbar-track { background: #1a1a2e; }
   #vis-list::-webkit-scrollbar-thumb, #stats-wrap::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
 
+  .blocks-green { color: #3fb950 !important; }
+  .blocks-yellow { color: #d29922 !important; }
+  .blocks-red { color: #f85149 !important; }
+
+  #undo-btn { position: relative; }
+  #undo-btn .undo-count {
+    font-size: 9px; background: #e94560; color: #fff; border-radius: 8px;
+    padding: 1px 5px; margin-left: 4px; font-weight: 700;
+  }
+
   @media (max-width: 640px) {
     #sidebar { width: 100%; height: auto; max-height: 240px; padding: 10px; }
     #canvas-container, #canvas-loading { left: 0; top: 240px; }
@@ -268,6 +278,9 @@
 
   <div class="btn-row">
     <button class="sidebar-btn danger" id="btn-delete" disabled style="flex:1">&#128465; Delete</button>
+    <button class="sidebar-btn" id="undo-btn" disabled style="flex:1">&#8617; Undo</button>
+  </div>
+  <div class="btn-row">
     <button class="sidebar-btn" id="toggle-wireframe" style="flex:1">&#9874; Wire</button>
   </div>
   <button class="sidebar-btn" id="toggle-transparent">&#9673; Show Transparent</button>
@@ -288,7 +301,7 @@
   <div id="stats-wrap"></div>
 
   <div class="footer">
-    Click=Select &bull; Shift+click=Toggle &bull; Drag=Marquee &bull; Right-drag=Orbit &bull; R+arrows=Rotate
+    Click=Select &bull; Shift+click=Toggle &bull; Drag=Marquee &bull; Right-drag=Orbit &bull; R+arrows=Rotate &bull; Ctrl+Z=Undo
   </div>
 </div>
 
@@ -659,7 +672,20 @@ let showTransparent = false;
 let currentModelInfo = null;
 const selectedMeshes = new Set();
 const keysDown = new Set();
-const hiddenTypes = new Set();  // block types that are hidden
+const hiddenTypes = new Set();
+
+const MAX_UNDO = 10;
+let undoHistory = [];
+let isUndoRedoing = false;
+let arrowMoveStarted = false;
+let lastUndoSaveTime = 0;
+
+function saveUndoSnapshotThrottled() {
+  const now = Date.now();
+  if (now - lastUndoSaveTime < 500) return;
+  lastUndoSaveTime = now;
+  saveUndoSnapshot();
+}
 
 // ========================================================================
 //  DOM REFS
@@ -674,6 +700,7 @@ const statBlocks = document.getElementById('stat-blocks');
 const wireBtn = document.getElementById('toggle-wireframe');
 const transparentBtn = document.getElementById('toggle-transparent');
 const btnDelete = document.getElementById('btn-delete');
+const undoBtn = document.getElementById('undo-btn');
 const btnSave = document.getElementById('btn-save');
 const btnCopyS1 = document.getElementById('btn-copy-s1');
 const btnCopyS2 = document.getElementById('btn-copy-s2');
@@ -742,6 +769,8 @@ function clearModel() {
   }
   currentModelInfo = null;
   hiddenTypes.clear();
+  undoHistory = [];
+  updateUndoButton();
   statParts.textContent = '0';
   statTypes.textContent = '0';
   statBlocks.textContent = '0';
@@ -991,6 +1020,7 @@ function updateSelectionPanel() {
 // --- Selection panel event handlers ---
 
 selColorPicker.addEventListener('input', () => {
+  saveUndoSnapshotThrottled();
   const color = hexToThreeColor(selColorPicker.value);
   selColorHex.textContent = selColorPicker.value;
   for (const mesh of selectedMeshes) {
@@ -1004,6 +1034,7 @@ selColorPicker.addEventListener('input', () => {
 });
 
 selRoughness.addEventListener('input', () => {
+  saveUndoSnapshotThrottled();
   const v = parseFloat(selRoughness.value);
   selRoughnessVal.textContent = v.toFixed(2);
   for (const mesh of selectedMeshes) {
@@ -1013,6 +1044,7 @@ selRoughness.addEventListener('input', () => {
 });
 
 selMetalness.addEventListener('input', () => {
+  saveUndoSnapshotThrottled();
   const v = parseFloat(selMetalness.value);
   selMetalnessVal.textContent = v.toFixed(2);
   for (const mesh of selectedMeshes) {
@@ -1024,6 +1056,7 @@ selMetalness.addEventListener('input', () => {
 selMatPreset.addEventListener('change', () => {
   const preset = selMatPreset.value;
   if (!preset) return;
+  saveUndoSnapshot();
   const vals = MATERIAL_PRESETS[preset];
   if (!vals) return;
 
@@ -1156,6 +1189,7 @@ function hideMarquee() {
 
 function deleteSelected() {
   if (selectedMeshes.size === 0 || !currentModelInfo) return;
+  saveUndoSnapshot();
 
   const parts = currentModelInfo.parts;
   const toRemove = new Set(selectedMeshes);
@@ -1377,13 +1411,95 @@ function updateStatsNumbers() {
 
   statSelected.textContent = selectedMeshes.size;
 
-  // Calculate total expanded blocks
   let totalExpanded = 0;
   for (const p of currentModelInfo.parts) {
     totalExpanded += getPartExpandedCount(p);
   }
   statBlocks.textContent = totalExpanded.toLocaleString();
+
+  statBlocks.classList.remove('blocks-green', 'blocks-yellow', 'blocks-red');
+  if (totalExpanded < 3000) {
+    statBlocks.classList.add('blocks-green');
+  } else if (totalExpanded <= 5000) {
+    statBlocks.classList.add('blocks-yellow');
+  } else {
+    statBlocks.classList.add('blocks-red');
+  }
 }
+
+// ========================================================================
+//  UNDO SYSTEM
+// ========================================================================
+
+function serializePartsData() {
+  if (!currentModelInfo) return null;
+  const parts = currentModelInfo.parts;
+  for (const p of parts) {
+    if (p._mesh) {
+      p.Position = vec3ToStr(p._mesh.position);
+      p.Rotation = radToDegStr(p._mesh.rotation);
+      if (p._data) {
+        p._data.Position = p.Position;
+        p._data.Rotation = p.Rotation;
+        const mat = Array.isArray(p._mesh.material) ? p._mesh.material[0] : p._mesh.material;
+        if (mat && mat.color) {
+          p._data.Color = `${roundN(mat.color.r,6)},${roundN(mat.color.g,6)},${roundN(mat.color.b,6)}`;
+        }
+        if (mat) {
+          p._data.Roughness = mat.roughness;
+          p._data.Metalness = mat.metalness;
+        }
+      }
+    }
+  }
+  return JSON.parse(JSON.stringify(currentModelInfo.rawData));
+}
+
+function saveUndoSnapshot() {
+  if (isUndoRedoing) return;
+  const snapshot = serializePartsData();
+  if (!snapshot) return;
+  undoHistory.push(snapshot);
+  if (undoHistory.length > MAX_UNDO) undoHistory.shift();
+  updateUndoButton();
+}
+
+function updateUndoButton() {
+  const n = undoHistory.length;
+  undoBtn.disabled = n === 0;
+  if (n > 0) {
+    undoBtn.innerHTML = `&#8617; Undo<span class="undo-count">${n}</span>`;
+  } else {
+    undoBtn.innerHTML = '&#8617; Undo';
+  }
+}
+
+function performUndo() {
+  if (undoHistory.length === 0 || !currentModelInfo) return;
+  isUndoRedoing = true;
+  const snapshot = undoHistory.pop();
+  clearSelection();
+
+  const info = parseModel(snapshot);
+  info.fileName = currentModelInfo.fileName;
+  info.isV2Format = currentModelInfo.isV2Format;
+  info.v2Metadata = currentModelInfo.v2Metadata;
+  currentModelInfo = info;
+
+  const savedPos = camera.position.clone();
+  const savedTarget = controls.target.clone();
+
+  buildScene(info.parts);
+  camera.position.copy(savedPos);
+  controls.target.copy(savedTarget);
+  controls.update();
+
+  rebuildUI();
+  updateUndoButton();
+  isUndoRedoing = false;
+}
+
+undoBtn.addEventListener('click', performUndo);
 
 // ========================================================================
 //  KEYBOARD CONTROLS
@@ -1391,6 +1507,12 @@ function updateStatsNumbers() {
 
 document.addEventListener('keydown', (e) => {
   keysDown.add(e.key);
+
+  if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    performUndo();
+    return;
+  }
 
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeshes.size > 0) {
     e.preventDefault();
@@ -1400,6 +1522,7 @@ document.addEventListener('keydown', (e) => {
 
   if (selectedMeshes.size > 0 && e.key.startsWith('Arrow')) {
     e.preventDefault();
+    if (!arrowMoveStarted) { saveUndoSnapshot(); arrowMoveStarted = true; }
 
     const isRotate = keysDown.has('r') || keysDown.has('R');
     const shift = keysDown.has('Shift');
@@ -1448,6 +1571,7 @@ document.addEventListener('keydown', (e) => {
 
 document.addEventListener('keyup', (e) => {
   keysDown.delete(e.key);
+  if (e.key.startsWith('Arrow')) arrowMoveStarted = false;
 });
 
 window.addEventListener('blur', () => { keysDown.clear(); });

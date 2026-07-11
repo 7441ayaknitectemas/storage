@@ -300,6 +300,8 @@
   <div class="section-title">Type Breakdown</div>
   <div id="stats-wrap"></div>
 
+  <button class="sidebar-btn" id="btn-changelog">&#128220; Changelog</button>
+
   <div class="footer">
     Click=Select &bull; Shift+click=Toggle &bull; Drag=Marquee &bull; Right-drag=Orbit &bull; R+arrows=Rotate &bull; Ctrl+Z=Undo
   </div>
@@ -311,6 +313,19 @@
 <div id="canvas-loading">
   <div class="spinner-lg"></div>
   <span>Loading model&hellip;</span>
+</div>
+
+<!-- === CHANGELOG MODAL === -->
+<div id="changelog-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:#16213e; border:1px solid #0f3460; border-radius:8px; max-width:600px; width:90%; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
+    <div style="padding:16px; border-bottom:1px solid #0f3460; display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="color:#e94560; font-size:18px; margin:0;">Changelog</h2>
+      <button id="changelog-close" style="background:none; border:none; color:#eee; font-size:20px; cursor:pointer;">&times;</button>
+    </div>
+    <div id="changelog-content" style="overflow-y:auto; padding:16px; flex:1;">
+      <div style="text-align:center; color:#888;">Loading...</div>
+    </div>
+  </div>
 </div>
 
 <script type="importmap">
@@ -594,23 +609,34 @@ function parseModel(data) {
         }
         
         if (Array.isArray(rotArr) && rotArr.length >= 3) {
-          // Rotation is stored as direction vectors, convert to Euler angles
-          // rotArr[0..2] = forward/right vector, rotArr[3..5] would be up vector but we use [0,1,0] default
+          // Rotation is stored as direction vectors (local axes in world space)
+          // entry[2] = right/forward vector, entry[3] = up vector
           const upArr = entry[3];
           const up = Array.isArray(upArr) && upArr.length === 3 ? upArr : [0, 1, 0];
           
-          // Extract Euler angles from direction vectors
-          // yaw = atan2(forward.x, forward.z)
-          // pitch = asin(-forward.y)
-          // roll = atan2(up.x * cos(yaw) + up.z * sin(yaw), up.y)
+          // Build rotation matrix from direction vectors
+          // Assuming rotArr is the forward vector, up is up vector
           const fx = rotArr[0], fy = rotArr[1], fz = rotArr[2];
           const ux = up[0], uy = up[1], uz = up[2];
           
-          const yaw = Math.atan2(fx, fz);
-          const pitch = Math.asin(Math.max(-1, Math.min(1, -fy)));
-          const cosYaw = Math.cos(yaw);
-          const sinYaw = Math.sin(yaw);
-          const roll = Math.atan2(ux * cosYaw + uz * sinYaw, uy);
+          // Compute right vector = up × forward
+          const rx = uy * fz - uz * fy;
+          const ry = uz * fx - ux * fz;
+          const rz = ux * fy - uy * fx;
+          
+          // Extract Euler angles (XYZ order) from rotation matrix
+          // R = [rx, fx, -rx×fx; ry, fy, -ry×fy; rz, fz, -rz×fz]
+          // For XYZ Euler: 
+          //   sin(pitch) = -R[2][0] = -rz (if using right as first column)
+          // Actually, let's use the standard conversion:
+          // yaw = atan2(R[1][0], R[0][0]) = atan2(ry, rx)
+          // pitch = asin(-R[2][0]) = asin(-rz)  
+          // roll = atan2(R[2][1], R[2][2])
+          
+          const yaw = Math.atan2(ry, rx);
+          const pitch = Math.asin(Math.max(-1, Math.min(1, -rz)));
+          const cosPitch = Math.cos(pitch);
+          const roll = Math.atan2(uy, ux);
           
           part.Rotation = `${roll * 180 / Math.PI},${yaw * 180 / Math.PI},${pitch * 180 / Math.PI}`;
         }
@@ -2319,6 +2345,64 @@ function copyScriptToClipboard(template) {
 
 btnCopyS1.addEventListener('click', () => copyScriptToClipboard(SCRIPT1_TEMPLATE));
 btnCopyS2.addEventListener('click', () => copyScriptToClipboard(SCRIPT2_TEMPLATE));
+
+// ========================================================================
+//  CHANGELOG
+// ========================================================================
+
+const changelogModal = document.getElementById('changelog-modal');
+const changelogContent = document.getElementById('changelog-content');
+const changelogClose = document.getElementById('changelog-close');
+const btnChangelog = document.getElementById('btn-changelog');
+
+btnChangelog.addEventListener('click', () => {
+  changelogModal.style.display = 'flex';
+  loadChangelog();
+});
+
+changelogClose.addEventListener('click', () => {
+  changelogModal.style.display = 'none';
+});
+
+changelogModal.addEventListener('click', (e) => {
+  if (e.target === changelogModal) {
+    changelogModal.style.display = 'none';
+  }
+});
+
+async function loadChangelog() {
+  changelogContent.innerHTML = '<div style="text-align:center; color:#888;">Loading...</div>';
+  
+  try {
+    const resp = await fetch('https://api.github.com/repos/7441ayaknitectemas/storage/commits?per_page=50');
+    if (!resp.ok) throw new Error('Failed to fetch');
+    
+    const commits = await resp.json();
+    
+    let html = '';
+    for (const commit of commits) {
+      const date = new Date(commit.commit.author.date).toLocaleDateString();
+      const message = commit.commit.message;
+      const sha = commit.sha.substring(0, 7);
+      const author = commit.commit.author.name;
+      
+      html += `
+        <div style="padding:12px; border-bottom:1px solid #0f3460; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="color:#e94560; font-weight:600; font-size:13px;">${sha}</span>
+            <span style="color:#666; font-size:11px;">${date}</span>
+          </div>
+          <div style="color:#eee; font-size:13px; margin-bottom:4px;">${message}</div>
+          <div style="color:#888; font-size:11px;">by ${author}</div>
+        </div>
+      `;
+    }
+    
+    changelogContent.innerHTML = html;
+  } catch (err) {
+    changelogContent.innerHTML = '<div style="text-align:center; color:#ff6b6b;">Failed to load changelog</div>';
+  }
+}
 </script>
 </body>
 </html>

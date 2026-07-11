@@ -212,8 +212,8 @@
   <div id="drop-zone">
     <div class="drop-zone-icon">&#128194;</div>
     <div class="drop-zone-text">Drop .json or .build file here</div>
-    <div class="drop-zone-sub">or <span id="browse-link">browse</span></div>
-    <input type="file" id="file-input" accept=".json,.build" style="display:none">
+    <div class="drop-zone-sub">Supports standard &amp; BuilderHub v2 &bull; <span id="browse-link">browse</span></div>
+    <input type="file" id="file-input" accept=".json,.build,.bhbuild,.txt" style="display:none">
   </div>
   <div id="drop-status"></div>
 
@@ -331,6 +331,7 @@ const DEFAULT_COLORS = {
   FabricBlock:   0x8B7355,
   TitaniumBlock: 0xC0C0C0,
   SandBlock:     0xC2B280,
+  IceBlock:      0xAADDFF,
   JetPackUltra:  0xFF4444,
   LightBulb:     0xFFFF88,
   Servo:         0x555555,
@@ -339,6 +340,62 @@ const DEFAULT_COLORS = {
   Lever:         0x555555,
   Piston:        0x555555,
   CarSeat:       0x555555,
+  Sign:          0xDDCCAA,
+  Lamp:          0xFFFF88,
+  Wheel:         0x444444,
+  Steering:      0x666666,
+  Thruster:      0xFF6633,
+  Propeller:     0x888888,
+  Wing:          0xAAAAAA,
+  Rotor:         0x777777,
+  Cannon:        0x556B2F,
+  Turret:        0x556B2F,
+  Shield:        0x4488FF,
+  Engine:        0x666666,
+  FuelTank:      0x886633,
+  Cockpit:       0x88CCEE,
+  Armor:         0x606060,
+  Spring:        0xBB8833,
+  Rope:          0x8B7355,
+  Beam:          0x999999,
+  Hinge:         0x777777,
+  Button:        0xDD4444,
+  Sensor:        0x44BB44,
+  Camera:        0x333333,
+  Speaker:       0x555555,
+  Antenna:       0x888888,
+  Flag:          0xDD3333,
+  Tire:          0x333333,
+  Rim:           0xAAAAAA,
+  Axle:          0x666666,
+  Gear:          0x777777,
+  Chain:         0x555555,
+  Belt:          0x444444,
+  Pipe:          0x888888,
+  Valve:         0xBB4444,
+  Pump:          0x666666,
+  Tank:          0x886633,
+  Barrel:        0x8B5A2B,
+  Crate:         0x8B5A2B,
+  Chest:         0x8B6914,
+  Door:          0x8B5A2B,
+  Window:        0x88CCEE,
+  Frame:         0x808080,
+  Panel:         0xAAAAAA,
+  Tile:          0xCCCCCC,
+  Brick:         0xAA6644,
+  Concrete:      0x999999,
+  Stone:         0x888888,
+  Dirt:          0x8B6914,
+  Grass:         0x44AA44,
+  Leaf:          0x338833,
+  Log:           0x6B4226,
+  Plank:         0x8B5A2B,
+  Stick:         0x6B4226,
+  Rope:          0x8B7355,
+  Wire:          0x555555,
+  Cable:         0x444444,
+  Chain:         0x555555,
 };
 
 const MATERIAL_PRESETS = {
@@ -424,6 +481,61 @@ function getPartExpandedCount(part) {
   const size = parseVec3(part.Size);
   if (!size) return 1;
   return getExpandedCount(size);
+}
+
+// ========================================================================
+//  BUILDERHUB V2 FORMAT PARSER
+// ========================================================================
+
+function isBuilderHubV2(text) {
+  const trimmed = text.trimStart();
+  return trimmed.startsWith('BuilderHub_') || trimmed.includes('[Build]') || trimmed.includes('[BlocksNeeded]');
+}
+
+function parseBuilderHubV2(text) {
+  const buildMatch = text.match(/Build\s*=\s*(\{[\s\S]*\})\s*$/m);
+  if (!buildMatch) {
+    const jsonStart = text.indexOf('{"v"');
+    if (jsonStart === -1) throw new Error('Could not find Build data in BuilderHub file');
+    const jsonStr = text.substring(jsonStart);
+    const endIdx = findMatchingBrace(jsonStr);
+    if (endIdx === -1) throw new Error('Malformed Build JSON');
+    return JSON.parse(jsonStr.substring(0, endIdx + 1));
+  }
+  return JSON.parse(buildMatch[1]);
+}
+
+function findMatchingBrace(str) {
+  let depth = 0;
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '{') depth++;
+    else if (str[i] === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+function convertV2BlocksToStandard(v2Data) {
+  const blocks = v2Data.b || v2Data.blocks || v2Data;
+  const result = {};
+  for (const [type, items] of Object.entries(blocks)) {
+    if (!Array.isArray(items)) continue;
+    result[type] = items.map(item => {
+      const converted = {};
+      if (item.p !== undefined) converted.Position = item.p;
+      if (item.r !== undefined) converted.Rotation = item.r;
+      if (item.sz !== undefined) converted.Size = item.sz;
+      if (item.cl !== undefined) converted.Color = item.cl;
+      if (item.t !== undefined) converted.Transparency = item.t;
+      if (item.s !== undefined) converted.ShowShadow = item.s;
+      for (const [k, v] of Object.entries(item)) {
+        if (!['p','r','sz','cl','t','s','i'].includes(k)) {
+          converted[k] = v;
+        }
+      }
+      return converted;
+    });
+  }
+  return result;
 }
 
 // ========================================================================
@@ -1104,7 +1216,7 @@ function deleteSelected() {
 function saveModel() {
   if (!currentModelInfo) return;
 
-  const { format, typeOrder, parts, rawData } = currentModelInfo;
+  const { format, typeOrder, parts, rawData, isV2Format, v2Metadata } = currentModelInfo;
 
   // Sync mesh data back to _data objects
   for (const p of parts) {
@@ -1123,6 +1235,47 @@ function saveModel() {
   }
 
   let output;
+  if (isV2Format) {
+    const blocks = {};
+    let idx = 1;
+    for (const type of typeOrder) {
+      if (grouped[type].length === 0) continue;
+      blocks[type] = grouped[type].map(item => {
+        const v2Item = { i: idx++ };
+        if (item.Position !== undefined) v2Item.p = item.Position;
+        if (item.Rotation !== undefined) v2Item.r = item.Rotation;
+        if (item.Size !== undefined) v2Item.sz = item.Size;
+        if (item.Color !== undefined) v2Item.cl = item.Color;
+        if (item.Transparency !== undefined) v2Item.t = item.Transparency;
+        if (item.ShowShadow !== undefined) v2Item.s = item.ShowShadow;
+        return v2Item;
+      });
+    }
+    output = {
+      v: (v2Metadata && v2Metadata.v) || 2,
+      lg: (v2Metadata && v2Metadata.lg) !== undefined ? v2Metadata.lg : true,
+      b: blocks
+    };
+
+    let fileContent = 'BuilderHub_\nJoin https://discord.gg/kKMmH3fyd3 to use this file\nBH2\n\n';
+    const totalBlocks = parts.length;
+    const blockTypeCounts = {};
+    for (const p of parts) { blockTypeCounts[p._type] = (blockTypeCounts[p._type] || 0) + 1; }
+    fileContent += `[BlocksNeeded]\nBlocksNeeded=${JSON.stringify({Total: totalBlocks, Count: totalBlocks, Blocks: blockTypeCounts})}\n\n`;
+    fileContent += `[Build]\nBuild=${JSON.stringify(output)}`;
+
+    const blob = new Blob([fileContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentModelInfo.fileName.replace(/\.[^.]+$/, '_modified.build');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return;
+  }
+
   if (format === 'array-tuple') {
     const activeTypes = typeOrder.filter(t => grouped[t].length > 0);
     output = [activeTypes, grouped];
@@ -1474,9 +1627,10 @@ function handleFile(file) {
 
   // Validate file type
   const ext = file.name.toLowerCase().split('.').pop();
-  if (ext !== 'json' && ext !== 'build') {
+  const validExts = ['json', 'build', 'bhbuild', 'txt'];
+  if (!validExts.includes(ext)) {
     dropStatus.className = 'error';
-    dropStatus.textContent = 'Error: Only .json and .build files are supported';
+    dropStatus.textContent = 'Error: Only .json, .build, and .txt files are supported';
     return;
   }
 
@@ -1486,9 +1640,30 @@ function handleFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = JSON.parse(e.target.result);
+      const text = e.target.result;
+      let data;
+      let isV2Format = false;
+      let v2Metadata = null;
+
+      if (isBuilderHubV2(text)) {
+        isV2Format = true;
+        const v2Raw = parseBuilderHubV2(text);
+        v2Metadata = { v: v2Raw.v, lg: v2Raw.lg };
+
+        const blocksMatch = text.match(/BlocksNeeded\s*=\s*(\{[\s\S]*?\})\s*\n/m);
+        if (blocksMatch) {
+          try { v2Metadata.blocksNeeded = JSON.parse(blocksMatch[1]); } catch(e) {}
+        }
+
+        data = convertV2BlocksToStandard(v2Raw);
+      } else {
+        data = JSON.parse(text);
+      }
+
       const info = parseModel(data);
       info.fileName = file.name;
+      info.isV2Format = isV2Format;
+      info.v2Metadata = v2Metadata;
       currentModelInfo = info;
 
       if (info.parts.length === 0) throw new Error('No parts found in file');
@@ -1503,7 +1678,7 @@ function handleFile(file) {
 
       // Show success
       dropStatus.className = 'success';
-      dropStatus.textContent = 'Loaded: ' + file.name;
+      dropStatus.textContent = `Loaded: ${file.name}${isV2Format ? ' (BuilderHub v2)' : ''} — ${info.parts.length} parts`;
 
     } catch (err) {
       canvasLoading.classList.add('hidden');
@@ -1901,7 +2076,7 @@ print("Done! Welded", count, "parts.")`;
 function buildExportJSON() {
   if (!currentModelInfo) return null;
 
-  const { format, typeOrder, parts } = currentModelInfo;
+  const { format, typeOrder, parts, isV2Format, v2Metadata } = currentModelInfo;
 
   // Sync mesh data back to _data objects
   for (const p of parts) {
@@ -1920,6 +2095,30 @@ function buildExportJSON() {
   }
 
   let output;
+  if (isV2Format) {
+    const blocks = {};
+    let idx = 1;
+    for (const type of typeOrder) {
+      if (grouped[type].length === 0) continue;
+      blocks[type] = grouped[type].map(item => {
+        const v2Item = { i: idx++ };
+        if (item.Position !== undefined) v2Item.p = item.Position;
+        if (item.Rotation !== undefined) v2Item.r = item.Rotation;
+        if (item.Size !== undefined) v2Item.sz = item.Size;
+        if (item.Color !== undefined) v2Item.cl = item.Color;
+        if (item.Transparency !== undefined) v2Item.t = item.Transparency;
+        if (item.ShowShadow !== undefined) v2Item.s = item.ShowShadow;
+        return v2Item;
+      });
+    }
+    output = {
+      v: (v2Metadata && v2Metadata.v) || 2,
+      lg: (v2Metadata && v2Metadata.lg) !== undefined ? v2Metadata.lg : true,
+      b: blocks
+    };
+    return JSON.stringify(output);
+  }
+
   if (format === 'array-tuple') {
     const activeTypes = typeOrder.filter(t => grouped[t].length > 0);
     output = [activeTypes, grouped];

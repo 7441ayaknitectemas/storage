@@ -594,8 +594,25 @@ function parseModel(data) {
         }
         
         if (Array.isArray(rotArr) && rotArr.length >= 3) {
-          // Rotation values appear to be in radians, convert to degrees
-          part.Rotation = `${rotArr[0] * 180 / Math.PI},${rotArr[1] * 180 / Math.PI},${rotArr[2] * 180 / Math.PI}`;
+          // Rotation is stored as direction vectors, convert to Euler angles
+          // rotArr[0..2] = forward/right vector, rotArr[3..5] would be up vector but we use [0,1,0] default
+          const upArr = entry[3];
+          const up = Array.isArray(upArr) && upArr.length === 3 ? upArr : [0, 1, 0];
+          
+          // Extract Euler angles from direction vectors
+          // yaw = atan2(forward.x, forward.z)
+          // pitch = asin(-forward.y)
+          // roll = atan2(up.x * cos(yaw) + up.z * sin(yaw), up.y)
+          const fx = rotArr[0], fy = rotArr[1], fz = rotArr[2];
+          const ux = up[0], uy = up[1], uz = up[2];
+          
+          const yaw = Math.atan2(fx, fz);
+          const pitch = Math.asin(Math.max(-1, Math.min(1, -fy)));
+          const cosYaw = Math.cos(yaw);
+          const sinYaw = Math.sin(yaw);
+          const roll = Math.atan2(ux * cosYaw + uz * sinYaw, uy);
+          
+          part.Rotation = `${roll * 180 / Math.PI},${yaw * 180 / Math.PI},${pitch * 180 / Math.PI}`;
         }
         
         if (typeof showShadow === 'boolean') {

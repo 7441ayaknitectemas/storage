@@ -795,6 +795,58 @@ function disposeGroup(group) {
   });
 }
 
+function computeFilteredBounds(parts) {
+  const positions = [];
+  for (const p of parts) {
+    const pos = parseVec3(p.Position);
+    if (pos) positions.push(pos.clone());
+  }
+  if (positions.length === 0) return { hasBounds: false };
+
+  const sorted = [...positions];
+  const median = new THREE.Vector3();
+  sorted.sort((a, b) => a.x - b.x);
+  median.x = sorted[Math.floor(sorted.length / 2)].x;
+  sorted.sort((a, b) => a.y - b.y);
+  median.y = sorted[Math.floor(sorted.length / 2)].y;
+  sorted.sort((a, b) => a.z - b.z);
+  median.z = sorted[Math.floor(sorted.length / 2)].z;
+
+  const distances = positions.map(p => p.distanceTo(median)).sort((a, b) => a - b);
+  const p95 = distances[Math.min(Math.floor(distances.length * 0.95), distances.length - 1)];
+  const threshold = Math.max(p95 * 2.5, 100);
+
+  const bbox = new THREE.Box3();
+  let hasBounds = false;
+
+  for (const p of parts) {
+    const pos = parseVec3(p.Position);
+    if (!pos) continue;
+    const size = parseVec3(p.Size);
+    if (size && size.x < 0.05 && size.y < 0.05 && size.z < 0.05) continue;
+    if (pos.distanceTo(median) > threshold) continue;
+    const s = size || new THREE.Vector3(0.5, 0.5, 0.5);
+    const half = s.clone().multiplyScalar(0.5);
+    bbox.expandByPoint(pos.clone().sub(half));
+    bbox.expandByPoint(pos.clone().add(half));
+    hasBounds = true;
+  }
+
+  if (!hasBounds) {
+    for (const p of parts) {
+      const pos = parseVec3(p.Position);
+      if (!pos) continue;
+      const s = parseVec3(p.Size) || new THREE.Vector3(0.5, 0.5, 0.5);
+      const half = s.clone().multiplyScalar(0.5);
+      bbox.expandByPoint(pos.clone().sub(half));
+      bbox.expandByPoint(pos.clone().add(half));
+      hasBounds = true;
+    }
+  }
+
+  return { center: bbox.getCenter(new THREE.Vector3()), size: bbox.getSize(new THREE.Vector3()), hasBounds };
+}
+
 function buildScene(parts) {
   if (modelGroup) {
     scene.remove(modelGroup);
@@ -802,8 +854,6 @@ function buildScene(parts) {
   }
 
   modelGroup = new THREE.Group();
-  const bbox = new THREE.Box3();
-  let hasBounds = false;
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -850,7 +900,6 @@ function buildScene(parts) {
 
     if (isWireframe) mat.wireframe = true;
 
-    // Apply visibility
     if (hiddenTypes.has(part._type)) {
       mesh.visible = false;
     }
@@ -859,16 +908,14 @@ function buildScene(parts) {
     part._mesh = mesh;
 
     modelGroup.add(mesh);
-    bbox.expandByObject(mesh);
-    hasBounds = true;
   }
 
   scene.add(modelGroup);
 
-  if (hasBounds) {
-    const center = bbox.getCenter(new THREE.Vector3());
-    const size = bbox.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+  const bounds = computeFilteredBounds(parts);
+  if (bounds.hasBounds) {
+    const { center, size: bboxSize } = bounds;
+    const maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z);
     controls.target.copy(center);
     if (maxDim > 0) {
       const d = maxDim * 1.8;

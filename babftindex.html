@@ -2276,9 +2276,7 @@ if #expandedBlocks > #smallParts then
         #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
 end
 
-local count = math.min(#expandedBlocks, #smallParts)
-
-for i = 1, count do
+for i = 1, math.min(#expandedBlocks, #smallParts) do
     Unweld(smallParts[i])
 end
 
@@ -2289,7 +2287,21 @@ local myplot = getMySpawnedPlot()
 
 Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
 
+aircraft = workspace[pname .. " Aircraft"]
 local anchorBase = aircraft.HalfPlate.BlockStd
+
+smallParts = {}
+for _, obj in ipairs(aircraft:GetDescendants()) do
+    if obj.Name == "SmallPart" and obj:IsA("Model") then
+        local part = obj:FindFirstChild("SPart")
+        if part then
+            part.CanCollide = false
+            table.insert(smallParts, part)
+        end
+    end
+end
+
+local count = math.min(#expandedBlocks, #smallParts)
 
 local centroid = Vector3.zero
 local validCount = 0

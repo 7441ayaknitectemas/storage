@@ -559,6 +559,54 @@ function parseModel(data) {
   const typeOrder = [];
   const parts = [];
 
+  // Format: Flat array of block entries [type, pos, rot, up, size, shadow, color, ...]
+  if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0]) && typeof data[0][0] === 'string') {
+    for (let i = 0; i < data.length; i++) {
+      const entry = data[i];
+      if (!Array.isArray(entry) || entry.length < 5) continue;
+      
+      const type = entry[0];
+      const posArr = entry[1];
+      const rotArr = entry[2];
+      const sizeArr = entry[4];
+      const showShadow = entry[5];
+      const colorArr = entry[6];
+      
+      if (!Array.isArray(posArr) || posArr.length !== 3) continue;
+      
+      const part = {
+        _type: type,
+        _data: entry,
+        Position: `${posArr[0]},${posArr[1]},${posArr[2]}`,
+      };
+      
+      if (Array.isArray(sizeArr) && sizeArr.length === 3) {
+        part.Size = `${sizeArr[0]},${sizeArr[1]},${sizeArr[2]}`;
+      }
+      
+      if (Array.isArray(rotArr) && rotArr.length >= 3) {
+        // Rotation might be quaternion-like, convert to euler degrees
+        // For now, treat as euler angles in radians and convert to degrees
+        part.Rotation = `${rotArr[0] * 180 / Math.PI},${rotArr[1] * 180 / Math.PI},${rotArr[2] * 180 / Math.PI}`;
+      }
+      
+      if (typeof showShadow === 'boolean') {
+        part.ShowShadow = showShadow;
+      }
+      
+      if (Array.isArray(colorArr) && colorArr.length === 3) {
+        // Color is in 0-255 range, convert to 0-1
+        part.Color = `${colorArr[0] / 255},${colorArr[1] / 255},${colorArr[2] / 255}`;
+      }
+      
+      parts.push(part);
+      if (!typeOrder.includes(type)) typeOrder.push(type);
+    }
+    
+    return { format: 'flat-array', typeOrder, parts, rawData: data };
+  }
+
+  // Format: Array-tuple [typeOrder, typeMap]
   if (Array.isArray(data)) {
     if (data.length >= 2 && Array.isArray(data[0]) && data[1] && typeof data[1] === 'object') {
       typeOrder.push(...data[0]);
@@ -576,6 +624,7 @@ function parseModel(data) {
     return { format: 'array-tuple', typeOrder, parts, rawData: data };
   }
 
+  // Format: Object { type: [parts] }
   for (const key of Object.keys(data)) {
     typeOrder.push(key);
   }

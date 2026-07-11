@@ -574,6 +574,11 @@ function parseModel(data) {
   const typeOrder = [];
   const parts = [];
 
+  // Format: {"Data": {type: [parts]}} with CFrame arrays
+  if (data && data.Data && typeof data.Data === 'object' && !Array.isArray(data.Data)) {
+    data = data.Data;
+  }
+
   // Format: Flat array of block entries [type, pos, rot, up, size, shadow, color, ...]
   // Distinguish from array-tuple by checking if data[1] is a numeric array (position)
   if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0]) && typeof data[0][0] === 'string') {
@@ -625,14 +630,6 @@ function parseModel(data) {
           const rz = ux * fy - uy * fx;
           
           // Extract Euler angles (XYZ order) from rotation matrix
-          // R = [rx, fx, -rx×fx; ry, fy, -ry×fy; rz, fz, -rz×fz]
-          // For XYZ Euler: 
-          //   sin(pitch) = -R[2][0] = -rz (if using right as first column)
-          // Actually, let's use the standard conversion:
-          // yaw = atan2(R[1][0], R[0][0]) = atan2(ry, rx)
-          // pitch = asin(-R[2][0]) = asin(-rz)  
-          // roll = atan2(R[2][1], R[2][2])
-          
           const yaw = Math.atan2(ry, rx);
           const pitch = Math.asin(Math.max(-1, Math.min(1, -rz)));
           const cosPitch = Math.cos(pitch);
@@ -676,7 +673,7 @@ function parseModel(data) {
     return { format: 'array-tuple', typeOrder, parts, rawData: data };
   }
 
-  // Format: Object { type: [parts] }
+  // Format: Object { type: [parts] } - including CFrame format
   for (const key of Object.keys(data)) {
     typeOrder.push(key);
   }
@@ -684,7 +681,43 @@ function parseModel(data) {
     if (Array.isArray(list)) {
       for (const item of list) {
         if (item && typeof item === 'object') {
-          parts.push({ _type: type, _data: item, ...item });
+          const part = { _type: type, _data: item, ...item };
+          
+          // Handle CFrame format: CFrame is a 12-element array [px,py,pz, r00,r01,r02, r10,r11,r12, r20,r21,r22]
+          if (Array.isArray(item.CFrame) && item.CFrame.length === 12) {
+            const cf = item.CFrame;
+            part.Position = `${cf[0]},${cf[1]},${cf[2]}`;
+            
+            // Extract Euler angles from 3x3 rotation matrix (row-major)
+            // R = [r00,r01,r02; r10,r11,r12; r20,r21,r22]
+            const r00 = cf[3], r01 = cf[4], r02 = cf[5];
+            const r10 = cf[6], r11 = cf[7], r12 = cf[8];
+            const r20 = cf[9], r21 = cf[10], r22 = cf[11];
+            
+            // XYZ Euler angles
+            const pitch = Math.asin(Math.max(-1, Math.min(1, -r20)));
+            const cosPitch = Math.cos(pitch);
+            const yaw = Math.atan2(r10, r00);
+            const roll = Math.atan2(r21, r22);
+            
+            part.Rotation = `${roll * 180 / Math.PI},${yaw * 180 / Math.PI},${pitch * 180 / Math.PI}`;
+          }
+          
+          // Handle Size as array
+          if (Array.isArray(item.Size) && item.Size.length === 3) {
+            part.Size = `${item.Size[0]},${item.Size[1]},${item.Size[2]}`;
+          }
+          
+          // Handle Color as hex string
+          if (typeof item.Color === 'string' && !item.Color.includes(',')) {
+            const hex = item.Color.padStart(6, '0');
+            const r = parseInt(hex.substr(0, 2), 16) / 255;
+            const g = parseInt(hex.substr(2, 2), 16) / 255;
+            const b = parseInt(hex.substr(4, 2), 16) / 255;
+            part.Color = `${r},${g},${b}`;
+          }
+          
+          parts.push(part);
         }
       }
     }

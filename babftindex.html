@@ -2035,7 +2035,7 @@ local function splitAxis(total)
     local pieces = {}
     local rem = total
     while rem > 0.001 do
-        local chunk = math.min(2, rem)
+        local chunk = math.min(2.5, rem)
         table.insert(pieces, chunk)
         rem = rem - chunk
     end
@@ -2198,7 +2198,7 @@ local function splitAxis(total)
     local pieces = {}
     local rem = total
     while rem > 0.001 do
-        local chunk = math.min(2, rem)
+        local chunk = math.min(2.5, rem)
         table.insert(pieces, chunk)
         rem = rem - chunk
     end

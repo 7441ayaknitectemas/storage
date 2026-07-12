@@ -2357,22 +2357,6 @@ loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/pl
 
 local myplot = getMySpawnedPlot()
 
-for i,v in pairs(myplot:GetDescendants()) do
-    if v.Name == "BlockStd" and (v.Parent.Name == "BlockBeam2" or v.Parent.Name == "BlockBeam" or v.Parent.Name == "BlockStd") then
-    end
-end
-
-for i,v in pairs(myplot:GetDescendants()) do
-    if v.Name == "SPart" then
-        Unweld(v)
-    end
-end
-
-task.wait(2)
-loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
-
-local myplot = getMySpawnedPlot()
-
 Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
 local player = Players.LocalPlayer
 local pname = player.Name
@@ -2464,23 +2448,37 @@ local function expandBlocks(inputBlocks)
     return result
 end
 
-local smallParts = {}
+local expandedBlocks = expandBlocks(blocks)
+local needed = #expandedBlocks
+
+print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, needed))
+
+-- Collect SPart parts from SmallPart models
+local allSmallParts = {}
+local allSmallPartModels = {}
 for _, obj in ipairs(aircraft:GetDescendants()) do
     if obj.Name == "SmallPart" and obj:IsA("Model") then
         local part = obj:FindFirstChild("SPart")
-        part.CanCollide = false
-        if part then table.insert(smallParts, part) end
+        if part then
+            part.CanCollide = false
+            table.insert(allSmallParts, part)
+            table.insert(allSmallPartModels, obj)
+        end
     end
 end
 
-local expandedBlocks = expandBlocks(blocks)
+local count = math.min(needed, #allSmallParts)
 
-print(string.format("SmallParts found: %d", #smallParts))
-print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, #expandedBlocks))
+print(string.format("SmallParts found: %d — only unwelding %d needed", #allSmallParts, count))
 
-if #expandedBlocks > #smallParts then
+if needed > #allSmallParts then
     warn(string.format("Need %d parts but only %d available - %d sub-blocks will be skipped!",
-        #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
+        needed, #allSmallParts, needed - #allSmallParts))
+end
+
+-- Only unweld the smallParts that will actually be used
+for i = 1, count do
+    Unweld(allSmallParts[i])
 end
 
 local centroid = Vector3.zero
@@ -2493,7 +2491,6 @@ for _, block in ipairs(blocks) do
 end
 if validCount > 0 then centroid /= validCount end
 
-local count = math.min(#expandedBlocks, #smallParts)
 print("Welding", count, "parts...")
 
 for i = 1, count do
@@ -2509,7 +2506,7 @@ for i = 1, count do
         anchorBase,
         true,
         anchorBase,
-        smallParts[i],
+        allSmallParts[i],
         offset,
         true
     )

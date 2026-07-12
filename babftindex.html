@@ -1633,29 +1633,45 @@ function updateStatsNumbers() {
 //  UNDO SYSTEM
 // ========================================================================
 
+function deepCloneEntry(val) {
+  if (val === null || val === undefined) return val;
+  if (Array.isArray(val)) {
+    const c = [];
+    for (let i = 0; i < val.length; i++) c[i] = deepCloneEntry(val[i]);
+    for (const k of Object.keys(val)) { if (isNaN(Number(k))) c[k] = deepCloneEntry(val[k]); }
+    return c;
+  }
+  if (typeof val === 'object') {
+    const c = {};
+    for (const k of Object.keys(val)) c[k] = deepCloneEntry(val[k]);
+    return c;
+  }
+  return val;
+}
+
 function serializePartsData() {
   if (!currentModelInfo) return null;
   const parts = currentModelInfo.parts;
-  const isFlat = currentModelInfo.format === 'flat-array';
   for (const p of parts) {
     if (p._mesh) {
-      const pos = p._mesh.position;
-      const rot = p._mesh.rotation;
+      const mesh = p._mesh;
+      const pos = mesh.position;
+      const rot = mesh.rotation;
       p.Position = vec3ToStr(pos);
       p.Rotation = radToDegStr(rot);
       if (p._data) {
         p._data.Position = p.Position;
         p._data.Rotation = p.Rotation;
-        if (isFlat) {
+        if (currentModelInfo.format === 'flat-array') {
           p._data[1] = [roundN(pos.x, 6), roundN(pos.y, 6), roundN(pos.z, 6)];
         }
-        const mat = Array.isArray(p._mesh.material) ? p._mesh.material[0] : p._mesh.material;
+        const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         if (mat && mat.color) {
           const cr = roundN(mat.color.r, 6);
           const cg = roundN(mat.color.g, 6);
           const cb = roundN(mat.color.b, 6);
           p._data.Color = `${cr},${cg},${cb}`;
-          if (isFlat) {
+          if (currentModelInfo.format === 'flat-array') {
             p._data[6] = [Math.round(mat.color.r * 255), Math.round(mat.color.g * 255), Math.round(mat.color.b * 255)];
           }
         }
@@ -1666,7 +1682,23 @@ function serializePartsData() {
       }
     }
   }
-  return JSON.parse(JSON.stringify(currentModelInfo.rawData));
+  return {
+    typeOrder: [...currentModelInfo.typeOrder],
+    parts: parts.map(p => ({
+      _type: p._type,
+      _data: deepCloneEntry(p._data),
+      Position: p.Position,
+      Rotation: p.Rotation,
+      Size: p.Size,
+      Color: p.Color,
+      Transparency: p.Transparency,
+      ShowShadow: p.ShowShadow,
+    })),
+    format: currentModelInfo.format,
+    fileName: currentModelInfo.fileName,
+    isV2Format: currentModelInfo.isV2Format,
+    v2Metadata: currentModelInfo.v2Metadata ? JSON.parse(JSON.stringify(currentModelInfo.v2Metadata)) : null,
+  };
 }
 
 function saveUndoSnapshot() {
@@ -1694,16 +1726,29 @@ function performUndo() {
   const snapshot = undoHistory.pop();
   clearSelection();
 
-  const info = parseModel(snapshot);
-  info.fileName = currentModelInfo.fileName;
-  info.isV2Format = currentModelInfo.isV2Format;
-  info.v2Metadata = currentModelInfo.v2Metadata;
-  currentModelInfo = info;
+  currentModelInfo.typeOrder = [...snapshot.typeOrder];
+  currentModelInfo.format = snapshot.format;
+  currentModelInfo.fileName = snapshot.fileName;
+  currentModelInfo.isV2Format = snapshot.isV2Format;
+  currentModelInfo.v2Metadata = snapshot.v2Metadata;
+  currentModelInfo.parts.length = 0;
+  for (const s of snapshot.parts) {
+    currentModelInfo.parts.push({
+      _type: s._type,
+      _data: deepCloneEntry(s._data),
+      Position: s.Position,
+      Rotation: s.Rotation,
+      Size: s.Size,
+      Color: s.Color,
+      Transparency: s.Transparency,
+      ShowShadow: s.ShowShadow,
+    });
+  }
 
   const savedPos = camera.position.clone();
   const savedTarget = controls.target.clone();
 
-  buildScene(info.parts);
+  buildScene(currentModelInfo.parts);
   camera.position.copy(savedPos);
   controls.target.copy(savedTarget);
   controls.update();

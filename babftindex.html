@@ -832,6 +832,9 @@ let undoHistory = [];
 let isUndoRedoing = false;
 let lastUndoSaveTime = 0;
 
+const STORAGE_KEY = 'model-editor-recent-builds';
+const MAX_RECENT = 4;
+
 function saveUndoSnapshotThrottled() {
   const now = Date.now();
   if (now - lastUndoSaveTime < 500) return;
@@ -1633,16 +1636,28 @@ function updateStatsNumbers() {
 function serializePartsData() {
   if (!currentModelInfo) return null;
   const parts = currentModelInfo.parts;
+  const isFlat = currentModelInfo.format === 'flat-array';
   for (const p of parts) {
     if (p._mesh) {
-      p.Position = vec3ToStr(p._mesh.position);
-      p.Rotation = radToDegStr(p._mesh.rotation);
+      const pos = p._mesh.position;
+      const rot = p._mesh.rotation;
+      p.Position = vec3ToStr(pos);
+      p.Rotation = radToDegStr(rot);
       if (p._data) {
         p._data.Position = p.Position;
         p._data.Rotation = p.Rotation;
+        if (isFlat) {
+          p._data[1] = [roundN(pos.x, 6), roundN(pos.y, 6), roundN(pos.z, 6)];
+        }
         const mat = Array.isArray(p._mesh.material) ? p._mesh.material[0] : p._mesh.material;
         if (mat && mat.color) {
-          p._data.Color = `${roundN(mat.color.r,6)},${roundN(mat.color.g,6)},${roundN(mat.color.b,6)}`;
+          const cr = roundN(mat.color.r, 6);
+          const cg = roundN(mat.color.g, 6);
+          const cb = roundN(mat.color.b, 6);
+          p._data.Color = `${cr},${cg},${cb}`;
+          if (isFlat) {
+            p._data[6] = [Math.round(mat.color.r * 255), Math.round(mat.color.g * 255), Math.round(mat.color.b * 255)];
+          }
         }
         if (mat) {
           p._data.Roughness = mat.roughness;
@@ -1980,9 +1995,6 @@ function handleFile(file) {
 //  LOCAL STORAGE – RECENT BUILDS
 // ========================================================================
 
-const STORAGE_KEY = 'model-editor-recent-builds';
-const MAX_RECENT = 4;
-
 function loadRecentBuilds() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2065,6 +2077,9 @@ function loadRecentBuildFile(build) {
     if (info.parts.length === 0) throw new Error('No parts found in file');
 
     hiddenTypes.clear();
+    undoHistory = [];
+    updateUndoButton();
+    lastUndoSaveTime = 0;
     buildScene(info.parts);
     rebuildUI();
 

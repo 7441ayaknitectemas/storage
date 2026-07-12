@@ -210,6 +210,19 @@
     #sidebar { width: 100%; height: auto; max-height: 240px; padding: 10px; }
     #canvas-container, #canvas-loading { left: 0; top: 240px; }
   }
+
+  #recent-builds { margin-bottom: 8px; }
+  #recent-builds .section-title { margin-top: 0; }
+  .recent-item {
+    display: flex; align-items: center; padding: 6px 8px; margin-bottom: 4px;
+    background: #1a1a2e; border: 1px solid #0f3460; border-radius: 5px;
+    cursor: pointer; transition: all .2s; font-size: 11px; gap: 8px;
+  }
+  .recent-item:hover { border-color: #e94560; background: rgba(233,69,96,0.06); }
+  .recent-item .recent-name { flex: 1; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-item .recent-parts { color: #e94560; font-weight: 600; font-size: 10px; white-space: nowrap; }
+  .recent-item .recent-date { color: #555; font-size: 9px; white-space: nowrap; }
+  .recent-item .recent-dropdown { color: #888; font-size: 10px; margin-left: -2px; }
 </style>
 </head>
 <body>
@@ -217,6 +230,12 @@
 <div id="sidebar">
   <h1>&#9881; Model Editor</h1>
   <div class="subtitle">Select &bull; Move &bull; Rotate &bull; Delete</div>
+
+  <!-- ============ RECENT BUILDS ============ -->
+  <div id="recent-builds" style="display:none">
+    <div class="section-title">Recent Builds</div>
+    <div id="recent-list"></div>
+  </div>
 
   <!-- ============ DRAG & DROP ZONE ============ -->
   <div id="drop-zone">
@@ -811,7 +830,6 @@ const hiddenTypes = new Set();
 const MAX_UNDO = 10;
 let undoHistory = [];
 let isUndoRedoing = false;
-let arrowMoveStarted = false;
 let lastUndoSaveTime = 0;
 
 function saveUndoSnapshotThrottled() {
@@ -1703,7 +1721,7 @@ document.addEventListener('keydown', (e) => {
 
   if (selectedMeshes.size > 0 && e.key.startsWith('Arrow')) {
     e.preventDefault();
-    if (!arrowMoveStarted) { saveUndoSnapshot(); arrowMoveStarted = true; }
+    saveUndoSnapshot();
 
     const isRotate = keysDown.has('r') || keysDown.has('R');
     const shift = keysDown.has('Shift');
@@ -1752,7 +1770,6 @@ document.addEventListener('keydown', (e) => {
 
 document.addEventListener('keyup', (e) => {
   keysDown.delete(e.key);
-  if (e.key.startsWith('Arrow')) arrowMoveStarted = false;
 });
 
 window.addEventListener('blur', () => { keysDown.clear(); });
@@ -1826,6 +1843,8 @@ function animate() {
 }
 
 animate();
+
+renderRecentBuilds();
 
 console.log('%c Roblox 3D Model Editor v2 ', 'background:#e94560;color:#fff;font-size:14px;padding:4px 8px;border-radius:4px;');
 console.log('Select a model to begin editing.');
@@ -1926,6 +1945,8 @@ function handleFile(file) {
 
       // Clear previous model and load new one
       hiddenTypes.clear();
+      undoHistory = [];
+      updateUndoButton();
       buildScene(info.parts);
       rebuildUI();
 
@@ -1935,6 +1956,9 @@ function handleFile(file) {
       // Show success
       dropStatus.className = 'success';
       dropStatus.textContent = `Loaded: ${file.name}${isV2Format ? ' (BuilderHub v2)' : ''} — ${info.parts.length} parts`;
+
+      saveRecentBuild(file.name, text, info.parts.length);
+      renderRecentBuilds();
 
     } catch (err) {
       canvasLoading.classList.add('hidden');
@@ -1950,6 +1974,110 @@ function handleFile(file) {
   };
 
   reader.readAsText(file);
+}
+
+// ========================================================================
+//  LOCAL STORAGE – RECENT BUILDS
+// ========================================================================
+
+const STORAGE_KEY = 'model-editor-recent-builds';
+const MAX_RECENT = 4;
+
+function loadRecentBuilds() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentBuild(name, textContent, partsCount) {
+  let builds = loadRecentBuilds();
+  builds = builds.filter(b => b.name !== name);
+  builds.unshift({ name, text: textContent, parts: partsCount, ts: Date.now() });
+  if (builds.length > MAX_RECENT) builds = builds.slice(0, MAX_RECENT);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(builds));
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+function renderRecentBuilds() {
+  const container = document.getElementById('recent-builds');
+  const list = document.getElementById('recent-list');
+  const builds = loadRecentBuilds();
+  if (builds.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  list.innerHTML = '';
+  for (const b of builds) {
+    const div = document.createElement('div');
+    div.className = 'recent-item';
+    const d = new Date(b.ts);
+    const dateStr = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    div.innerHTML = `
+      <span class="recent-dropdown">&#9660;</span>
+      <span class="recent-name" title="${b.name}">${b.name}</span>
+      <span class="recent-parts">${b.parts} parts</span>
+      <span class="recent-date">${dateStr}</span>
+    `;
+    div.addEventListener('click', () => {
+      loadRecentBuildFile(b);
+    });
+    list.appendChild(div);
+  }
+}
+
+function loadRecentBuildFile(build) {
+  canvasLoading.classList.remove('hidden');
+  dropStatus.className = '';
+  dropStatus.style.display = 'none';
+
+  try {
+    const text = build.text;
+    let data;
+    let isV2Format = false;
+    let v2Metadata = null;
+
+    if (isBuilderHubV2(text)) {
+      isV2Format = true;
+      const v2Raw = parseBuilderHubV2(text);
+      v2Metadata = { v: v2Raw.v, lg: v2Raw.lg };
+      const blocksMatch = text.match(/BlocksNeeded\s*=\s*(\{[\s\S]*?\})\s*\n/m);
+      if (blocksMatch) {
+        try { v2Metadata.blocksNeeded = JSON.parse(blocksMatch[1]); } catch(e) {}
+      }
+      data = convertV2BlocksToStandard(v2Raw);
+    } else {
+      data = JSON.parse(text);
+    }
+
+    const info = parseModel(data);
+    info.fileName = build.name;
+    info.isV2Format = isV2Format;
+    info.v2Metadata = v2Metadata;
+    currentModelInfo = info;
+
+    if (info.parts.length === 0) throw new Error('No parts found in file');
+
+    hiddenTypes.clear();
+    buildScene(info.parts);
+    rebuildUI();
+
+    canvasLoading.classList.add('hidden');
+
+    dropStatus.className = 'success';
+    dropStatus.textContent = `Loaded: ${build.name}${isV2Format ? ' (BuilderHub v2)' : ''} — ${info.parts.length} parts`;
+
+  } catch (err) {
+    canvasLoading.classList.add('hidden');
+    dropStatus.className = 'error';
+    dropStatus.textContent = 'Error: ' + err.message;
+  }
 }
 
 // ========================================================================
@@ -2028,7 +2156,7 @@ local function parseColor(str)
 end
 
 local function toGrid(studs)
-    return math.clamp(studs / 2, 0.04, 1)
+    return math.clamp(studs / 2.5, 0.04, 1)
 end
 
 local function splitAxis(total)
@@ -2167,9 +2295,30 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
 
+local myplot = getMySpawnedPlot()
+
+for i,v in pairs(myplot:GetDescendants()) do
+    if v.Name == "BlockStd" and (v.Parent.Name == "BlockBeam2" or v.Parent.Name == "BlockBeam" or v.Parent.Name == "BlockStd") then
+    end
+end
+
+for i,v in pairs(myplot:GetDescendants()) do
+    if v.Name == "SPart" then
+        Unweld(v)
+    end
+end
+
+task.wait(2)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
+
+local myplot = getMySpawnedPlot()
+
+Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
 local player = Players.LocalPlayer
 local pname = player.Name
+
 local aircraft = workspace[pname .. " Aircraft"]
+local anchorBase = aircraft.HalfPlate.BlockStd
 
 local data = HttpService:JSONDecode([===[%DATA%]===])
 
@@ -2259,10 +2408,8 @@ local smallParts = {}
 for _, obj in ipairs(aircraft:GetDescendants()) do
     if obj.Name == "SmallPart" and obj:IsA("Model") then
         local part = obj:FindFirstChild("SPart")
-        if part then
-            part.CanCollide = false
-            table.insert(smallParts, part)
-        end
+        part.CanCollide = false
+        if part then table.insert(smallParts, part) end
     end
 end
 
@@ -2276,33 +2423,6 @@ if #expandedBlocks > #smallParts then
         #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
 end
 
-for i = 1, math.min(#expandedBlocks, #smallParts) do
-    Unweld(smallParts[i])
-end
-
-task.wait(2)
-loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
-
-local myplot = getMySpawnedPlot()
-
-Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
-
-aircraft = workspace[pname .. " Aircraft"]
-local anchorBase = aircraft.HalfPlate.BlockStd
-
-smallParts = {}
-for _, obj in ipairs(aircraft:GetDescendants()) do
-    if obj.Name == "SmallPart" and obj:IsA("Model") then
-        local part = obj:FindFirstChild("SPart")
-        if part then
-            part.CanCollide = false
-            table.insert(smallParts, part)
-        end
-    end
-end
-
-local count = math.min(#expandedBlocks, #smallParts)
-
 local centroid = Vector3.zero
 local validCount = 0
 for _, block in ipairs(blocks) do
@@ -2313,6 +2433,7 @@ for _, block in ipairs(blocks) do
 end
 if validCount > 0 then centroid /= validCount end
 
+local count = math.min(#expandedBlocks, #smallParts)
 print("Welding", count, "parts...")
 
 for i = 1, count do

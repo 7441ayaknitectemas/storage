@@ -747,6 +747,15 @@ function getDefaultColor(type) {
   return DEFAULT_COLORS[type] || 0x999999;
 }
 
+function getPartBaseOpacity(part) {
+  const transparency = Number(part.Transparency);
+  const storedOpacity = part.Transparency !== undefined && Number.isFinite(transparency)
+    ? Math.max(0.01, 1 - transparency)
+    : 1;
+  const isGlass = String(part._type || '').toLowerCase().includes('glass');
+  return isGlass ? Math.min(storedOpacity, 0.35) : storedOpacity;
+}
+
 function parseVec3(str) {
   if (!str) return null;
   const p = str.split(',').map(s => parseFloat(s.trim()));
@@ -1092,7 +1101,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.65;
+renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -1200,12 +1209,12 @@ if (gizmoMode === 'translate') {
 
 // --- Lighting ---
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+scene.add(new THREE.AmbientLight(0xffffff, 0.38));
 
-const hemi = new THREE.HemisphereLight(0xf2f6ff, 0x303238, 1.25);
+const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 0.62);
 scene.add(hemi);
 
-const dir = new THREE.DirectionalLight(0xffffff, 3.4);
+const dir = new THREE.DirectionalLight(0xffffff, 2.0);
 dir.position.set(20, 30, 20);
 dir.castShadow = true;
 dir.shadow.mapSize.width = 2048;
@@ -1218,11 +1227,11 @@ dir.shadow.camera.top = 30;
 dir.shadow.camera.bottom = -30;
 scene.add(dir);
 
-const fill = new THREE.DirectionalLight(0xcad8ff, 1.15);
+const fill = new THREE.DirectionalLight(0xffffff, 0.28);
 fill.position.set(-15, 10, -15);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xffffff, 0.9);
+const rim = new THREE.DirectionalLight(0xffffff, 0.3);
 rim.position.set(-5, -10, 20);
 scene.add(rim);
 
@@ -1969,7 +1978,7 @@ function buildScene(parts) {
     const geom = new THREE.BoxGeometry(s.x, s.y, s.z);
 
     const color = parseColor(part.Color) || getDefaultColor(part._type);
-    const origOpacity = part.Transparency !== undefined ? Math.max(0.01, 1 - part.Transparency) : 1;
+    const origOpacity = getPartBaseOpacity(part);
     const opacity = showTransparent ? 1 : origOpacity;
     const transparent = showTransparent ? false : opacity < 0.999;
 
@@ -2983,7 +2992,7 @@ transparentBtn.addEventListener('click', () => {
         mat.transparent = false;
         mat.depthWrite = true;
       } else {
-        const origOpacity = p.Transparency !== undefined ? Math.max(0.01, 1 - p.Transparency) : 1;
+        const origOpacity = getPartBaseOpacity(p);
         mat.opacity = origOpacity;
         mat.transparent = origOpacity < 0.999;
         mat.depthWrite = origOpacity >= 0.999;

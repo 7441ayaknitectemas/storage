@@ -3,232 +3,480 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roblox 3D Model Editor</title>
-<meta property="og:title" content="Roblox 3D Model Editor">
+<title>babft to pc converter</title>
+<meta property="og:title" content="babft to pc converter">
 <meta property="og:description" content="Edit BABFT build files easily from the web — drag & drop your .json or .build files, preview in 3D, select, move, rotate, delete parts, and export modified builds.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Roblox 3D Model Editor">
+<meta name="twitter:title" content="babft to pc converter">
 <meta name="twitter:description" content="Edit BABFT build files easily from the web — drag & drop your .json or .build files, preview in 3D, select, move, rotate, delete parts, and export modified builds.">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg-0: #000000;
+    --bg-1: #050505;
+    --bg-2: #0d0d0d;
+    --bg-3: #121212;
+    --bg-4: #1a1a1a;
+    --line: #202020;
+    --line-strong: #333333;
+    --text-0: #f2f2f2;
+    --text-1: #a0a0a0;
+    --text-2: #5c5c5c;
+    --accent: #ff3045;
+    --accent-strong: #ff5b6b;
+    --accent-ink: #ffffff;
+    --accent-dim: rgba(255, 48, 69, 0.10);
+    --accent-line: rgba(255, 48, 69, 0.48);
+    --ok: #34d399;
+    --ok-dim: rgba(52, 211, 153, 0.10);
+    --ok-line: rgba(52, 211, 153, 0.35);
+    --warn: #fbbf24;
+    --err: #f87171;
+    --err-dim: rgba(248, 113, 113, 0.10);
+    --err-line: rgba(248, 113, 113, 0.38);
+    --radius-s: 6px;
+    --radius-m: 8px;
+    --radius-l: 12px;
+    --font-ui: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    --sidebar-w: 280px;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #eee; }
+  html, body {
+    height: 100%; overflow: hidden; font-family: var(--font-ui); color: var(--text-0);
+    background-color: var(--bg-0);
+    background-image: radial-gradient(circle, rgba(255,255,255,0.055) 1px, transparent 1.2px);
+    background-size: 44px 44px;
+  }
+  ::selection { background: rgba(255, 48, 69, 0.28); }
 
+  /* ============ SIDEBAR ============ */
   #sidebar {
-    position: fixed; top: 0; left: 0; width: 270px; height: 100%;
-    background: #16213e; border-right: 1px solid #0f3460;
+    position: fixed; top: 0; left: 0; width: var(--sidebar-w); height: 100%;
+    background: rgba(5, 5, 5, 0.97); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; z-index: 10;
-    padding: 16px 14px; overflow-y: auto;
+    padding: 18px 16px 16px; overflow-y: auto;
   }
-  #sidebar h1 { font-size: 17px; font-weight: 600; margin-bottom: 2px; color: #e94560; letter-spacing: 0.5px; }
-  #sidebar .subtitle { font-size: 11px; color: #666; margin-bottom: 14px; }
 
-  #sidebar label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #777; margin-bottom: 4px; display: block; }
-
-  .stat-row {
-    display: flex; gap: 6px; margin-bottom: 10px;
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: var(--radius-m); flex-shrink: 0;
+    background: #0b0708; border: 1px solid var(--accent-line);
+    display: flex; align-items: center; justify-content: center; color: var(--accent);
+    box-shadow: inset 0 0 14px rgba(255, 48, 69, 0.10), 0 0 18px rgba(255, 48, 69, 0.05);
   }
+  #sidebar h1 { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text-0); letter-spacing: 0; }
+  #sidebar h1::before { content: '> '; color: var(--accent); }
+  #sidebar h1::after { content: '_'; color: var(--accent); animation: terminalBlink 1.1s steps(1) infinite; }
+  @keyframes terminalBlink { 50% { opacity: 0; } }
+  #sidebar .subtitle {
+    font-family: var(--font-mono); font-size: 9.5px; color: var(--text-2);
+    letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 16px;
+  }
+
+  /* ============ STATS ============ */
+  .stat-row { display: flex; gap: 8px; margin-bottom: 8px; }
   .stat-box {
-    background: #1a1a2e; border-radius: 6px; padding: 8px 10px;
-    border: 1px solid #0f3460; flex: 1; min-width: 0;
+    background: var(--bg-2); border-radius: var(--radius-m); padding: 10px 12px;
+    border: 1px solid var(--line); flex: 1; min-width: 0;
+    transition: border-color .2s, background .2s;
   }
-  .stat-box .stat-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-  .stat-box .stat-value { font-size: 16px; font-weight: 700; color: #e94560; margin-top: 1px; }
+  .stat-box:hover { border-color: var(--line-strong); background: var(--bg-3); }
+  .stat-box .stat-label { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.12em; }
+  .stat-box .stat-value {
+    font-family: var(--font-mono); font-size: 18px; font-weight: 600;
+    color: var(--accent); margin-top: 3px; font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
 
+  /* ============ BUTTONS ============ */
   .sidebar-btn {
-    display: block; width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #0f3460;
-    background: #1a1a2e; color: #eee; font-size: 12px; cursor: pointer;
-    margin-top: 6px; transition: all .2s; text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 9px 10px; border-radius: var(--radius-m);
+    border: 1px solid var(--line); background: var(--bg-2); color: var(--text-1);
+    font-family: var(--font-ui); font-size: 12px; font-weight: 500; cursor: pointer;
+    margin-top: 8px; text-align: center; user-select: none;
+    transition: background .18s, border-color .18s, color .18s, transform .18s, box-shadow .18s;
   }
-  .sidebar-btn:hover { background: #0f3460; border-color: #e94560; }
-  .sidebar-btn.primary { background: #e94560; border-color: #e94560; font-weight: 600; }
-  .sidebar-btn.primary:hover { background: #d63851; }
-  .sidebar-btn.danger { border-color: #e94560; color: #ff6b6b; }
-  .sidebar-btn.danger:hover { background: #2a1515; }
-  .sidebar-btn.active { background: #0f3460; border-color: #e94560; }
-  .sidebar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .sidebar-btn:disabled:hover { background: #1a1a2e; border-color: #0f3460; }
+  .sidebar-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .sidebar-btn:hover { background: var(--bg-3); border-color: var(--line-strong); color: var(--text-0); transform: translateY(-1px); }
+  .sidebar-btn:active { transform: translateY(0); }
+  .sidebar-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sidebar-btn.primary {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+    font-weight: 600; box-shadow: 0 4px 18px rgba(255, 48, 69, 0.14);
+  }
+  .sidebar-btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-ink); box-shadow: 0 6px 24px rgba(255, 48, 69, 0.25); }
+  .sidebar-btn.danger { border-color: var(--err-line); color: var(--err); }
+  .sidebar-btn.danger:hover { background: var(--err-dim); border-color: var(--err); color: var(--err); }
+  .sidebar-btn.active { background: var(--accent-dim); border-color: var(--accent-line); color: var(--accent); }
+  .sidebar-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+  .sidebar-btn:disabled:hover { background: var(--bg-2); border-color: var(--line); color: var(--text-1); transform: none; }
+  .sidebar-btn.primary:disabled:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .sidebar-btn.accent { border-color: var(--accent-line); color: var(--accent); }
+  .sidebar-btn.accent:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-strong); }
+
+  .group-item {
+    display: flex; align-items: center; padding: 7px 9px; font-size: 12px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-m);
+    margin-bottom: 6px; gap: 8px; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .group-item:hover { border-color: var(--accent-line); background: var(--bg-3); }
+  .group-item.selected { border-color: var(--accent-line); background: var(--accent-dim); }
+  .group-item .group-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
+  .group-item .group-info { flex: 1; color: var(--text-1); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .group-item .group-parts { color: var(--accent); font-weight: 600; font-size: 10px; white-space: nowrap; }
+  .group-item .group-motor-badge { color: var(--ok); font-size: 9px; font-family: var(--font-mono); background: var(--ok-dim); padding: 1px 6px; border-radius: 999px; }
+  .group-item .group-ungroup { color: var(--err); font-size: 10px; cursor: pointer; padding: 2px 6px; border-radius: var(--radius-s); border: 1px solid transparent; transition: all .15s; }
+  .group-item .group-ungroup:hover { border-color: var(--err-line); background: var(--err-dim); }
+
+  #groups-list { max-height: 160px; overflow-y: auto; margin-bottom: 6px; padding-right: 2px; flex-shrink: 0; }
+  #groups-list::-webkit-scrollbar { width: 5px; }
+  #groups-list::-webkit-scrollbar-track { background: transparent; }
+  #groups-list::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 999px; }
+  #groups-list::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+
+  /* Icon masks for buttons whose labels are rewritten by JS */
+  #undo-btn::before, #toggle-wireframe::before, #toggle-transparent::before {
+    content: ""; width: 14px; height: 14px; flex-shrink: 0; background: currentColor;
+    -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain;
+    mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+  }
+  #undo-btn::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11'/%3E%3C/svg%3E");
+  }
+  #toggle-wireframe::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5'/%3E%3Cpath d='M12 22V12'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5'/%3E%3Cpath d='M12 22V12'/%3E%3C/svg%3E");
+  }
+  #toggle-transparent::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z'/%3E%3C/svg%3E");
+  }
 
   .section-title {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
-    color: #555; margin-top: 12px; margin-bottom: 6px;
-    padding-bottom: 3px; border-bottom: 1px solid #0f3460;
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--text-2); margin-top: 18px; margin-bottom: 8px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--line);
   }
 
-  .btn-row { display: flex; gap: 6px; }
-  .btn-row .sidebar-btn { margin-top: 6px; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .sidebar-btn { margin-top: 8px; }
 
+  /* ============ LOADING / ERROR ============ */
   #loading {
-    display: none; padding: 8px; border-radius: 6px;
-    background: #1a1a2e; border: 1px solid #0f3460; text-align: center;
-    font-size: 12px; color: #aaa; margin-bottom: 8px;
+    display: none; padding: 9px 12px; border-radius: var(--radius-m);
+    background: var(--bg-2); border: 1px solid var(--line);
+    font-size: 12px; color: var(--text-1); margin-bottom: 8px;
   }
   #loading .spinner {
-    display: inline-block; width: 16px; height: 16px; border: 2px solid #0f3460;
-    border-top-color: #e94560; border-radius: 50%; animation: spin .8s linear infinite;
-    margin-right: 6px; vertical-align: middle;
+    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bg-4);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+    margin-right: 8px; vertical-align: -2px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   #error-msg {
-    display: none; padding: 8px; border-radius: 6px;
-    background: #2a1515; border: 1px solid #e94560; font-size: 12px; color: #ff6b6b; margin-bottom: 8px;
+    display: none; padding: 9px 12px; border-radius: var(--radius-m);
+    background: var(--err-dim); border: 1px solid var(--err-line);
+    font-size: 12px; color: var(--err); margin-bottom: 8px; line-height: 1.45;
   }
 
-  .footer { margin-top: auto; font-size: 10px; color: #444; text-align: center; padding-top: 10px; border-top: 1px solid #0f3460; }
-
-  #canvas-container {
-    position: fixed; top: 0; left: 270px; right: 0; bottom: 0;
+  /* ============ FOOTER ============ */
+  .footer {
+    margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 6px 12px;
   }
+  .footer span { font-size: 10px; color: var(--text-2); display: inline-flex; align-items: center; gap: 5px; }
+  .footer kbd {
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-1);
+    background: var(--bg-3); border: 1px solid var(--line-strong); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 5px; white-space: nowrap;
+  }
+
+  /* ============ CANVAS ============ */
+  #canvas-container { position: fixed; top: 0; left: var(--sidebar-w); right: 0; bottom: 0; background: var(--bg-0); }
   #canvas-container canvas { display: block; width: 100% !important; height: 100% !important; }
+  #canvas-container::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at 72% 42%, transparent 0, transparent 42%, rgba(0,0,0,0.36) 100%);
+    box-shadow: inset 0 0 90px rgba(0,0,0,0.5);
+  }
+
+  #scale-control {
+    position: fixed; z-index: 8; left: calc(var(--sidebar-w) + 16px); bottom: 16px;
+    width: 250px; display: none; padding: 10px 12px 11px;
+    background: rgba(7, 7, 7, 0.92); border: 1px solid var(--line-strong);
+    border-radius: var(--radius-m); box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px);
+  }
+  #scale-control.show { display: block; }
+  .scale-control-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .scale-control-title {
+    color: var(--text-1); font: 500 9px/1 var(--font-mono);
+    letter-spacing: 0.13em; text-transform: uppercase;
+  }
+  #scale-value { color: var(--accent); font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  #build-scale {
+    width: 100%; height: 4px; display: block; appearance: none; -webkit-appearance: none;
+    border-radius: 999px; outline: none; cursor: pointer;
+    background: linear-gradient(90deg, var(--accent) 0 var(--scale-fill, 48.72%), var(--bg-4) var(--scale-fill, 48.72%) 100%);
+  }
+  #build-scale::-webkit-slider-thumb {
+    appearance: none; -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent); border: 2px solid #090909;
+    box-shadow: 0 0 0 1px var(--accent-line), 0 0 12px rgba(255,48,69,0.28);
+  }
+  #build-scale::-moz-range-thumb {
+    width: 11px; height: 11px; border-radius: 50%; background: var(--accent);
+    border: 2px solid #090909; box-shadow: 0 0 0 1px var(--accent-line);
+  }
+  .scale-control-range { display: flex; justify-content: space-between; margin-top: 6px; color: var(--text-2); font: 8px/1 var(--font-mono); }
+
+  #motor-preview-control {
+    position: fixed; z-index: 8; left: calc(var(--sidebar-w) + 16px); bottom: 105px;
+    width: 250px; display: none; padding: 10px 12px;
+    background: rgba(7, 7, 7, 0.92); border: 1px solid var(--line-strong);
+    border-radius: var(--radius-m); box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px);
+  }
+  #motor-preview-control.show { display: block; }
+  #motor-preview-toggle {
+    width: 100%; padding: 7px 9px; border-radius: var(--radius-s);
+    border: 1px solid var(--accent-line); background: var(--accent-dim);
+    color: var(--accent); font: 600 10px/1 var(--font-mono); cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  #motor-preview-toggle:hover, #motor-preview-toggle.active {
+    color: #fff; background: var(--accent); border-color: var(--accent);
+  }
+  .motor-speed-row { display: flex; align-items: center; gap: 9px; margin-top: 9px; }
+  .motor-speed-row label { color: var(--text-2); font: 9px/1 var(--font-mono); text-transform: uppercase; }
+  #motor-preview-speed { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  #motor-preview-rpm { min-width: 54px; text-align: right; color: var(--text-1); font: 10px/1 var(--font-mono); }
 
   #canvas-loading {
-    position: fixed; top: 0; left: 270px; right: 0; bottom: 0;
+    position: fixed; top: 0; left: var(--sidebar-w); right: 0; bottom: 0;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(26, 26, 46, 0.85); z-index: 5;
-    font-size: 18px; color: #e94560; gap: 12px;
-    transition: opacity .4s;
+    background: rgba(8, 9, 11, 0.82); backdrop-filter: blur(6px); z-index: 5;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent); gap: 14px; transition: opacity .4s;
   }
   #canvas-loading.hidden { opacity: 0; pointer-events: none; }
   #canvas-loading .spinner-lg {
-    width: 32px; height: 32px; border: 3px solid #0f3460;
-    border-top-color: #e94560; border-radius: 50%; animation: spin .8s linear infinite;
+    width: 32px; height: 32px; border: 2px solid var(--bg-4);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
   }
 
-  #marquee-box {
-    position: fixed; z-index: 8; display: none; pointer-events: none;
-    border: 2px solid #e94560; background: rgba(233, 69, 96, 0.08);
+
+	#marquee-box {
+    position: fixed; z-index: 999; display: none; pointer-events: none;
+    border: 1.5px solid var(--accent); background: rgba(255, 48, 69, 0.11);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.4), 0 0 16px rgba(255, 48, 69, 0.24);
     border-radius: 2px;
   }
 
   /* ============ SELECTION INFO PANEL ============ */
-  #sel-panel { display: none; margin-bottom: 8px; }
+  #sel-panel {
+    display: none; margin: 12px 0 2px; padding: 11px 12px 12px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-m);
+  }
   #sel-panel.show { display: block; }
-  .sel-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; gap: 6px; }
-  .sel-row .sel-lbl { color: #777; min-width: 65px; flex-shrink: 0; font-size: 11px; }
-  #sel-type-name { font-weight: 600; color: #e94560; font-size: 13px; }
+  #sel-panel .section-title { margin-top: 0; margin-bottom: 10px; padding-bottom: 0; border-bottom: none; color: var(--accent); }
+  .sel-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 12px; gap: 8px; }
+  .sel-row:last-child { margin-bottom: 0; }
+  .sel-row .sel-lbl {
+    color: var(--text-2); min-width: 70px; flex-shrink: 0;
+    font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  #sel-type-name { font-weight: 600; color: var(--accent); font-size: 13px; }
 
-  .sel-row .sel-val { flex: 1; display: flex; align-items: center; gap: 6px; }
+  .sel-row .sel-val { flex: 1; display: flex; align-items: center; gap: 8px; }
   #sel-color-picker {
-    width: 32px; height: 24px; border: 1px solid #0f3460; border-radius: 3px;
-    cursor: pointer; background: none; padding: 1px;
+    width: 40px; height: 26px; border: 1px solid var(--line-strong); border-radius: var(--radius-s);
+    cursor: pointer; background: var(--bg-3); padding: 2px;
   }
   #sel-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
-  #sel-color-picker::-webkit-color-swatch { border: none; border-radius: 2px; }
-  #sel-color-hex { font-size: 10px; color: #aaa; font-family: monospace; }
+  #sel-color-picker::-webkit-color-swatch { border: none; border-radius: 4px; }
+  #sel-color-hex { font-size: 11px; color: var(--text-1); font-family: var(--font-mono); }
 
-  .sel-range-wrap { display: flex; align-items: center; gap: 6px; flex: 1; }
+  .sel-range-wrap { display: flex; align-items: center; gap: 8px; flex: 1; }
   .sel-range-wrap input[type="range"] {
-    -webkit-appearance: none; flex: 1; height: 3px;
-    background: #0f3460; border-radius: 2px; outline: none;
+    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 4px;
+    background: var(--bg-4); border-radius: 999px; outline: none; cursor: pointer;
   }
   .sel-range-wrap input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 12px; height: 12px;
-    background: #e94560; border-radius: 50%; cursor: pointer;
+    -webkit-appearance: none; width: 13px; height: 13px;
+    background: var(--accent); border-radius: 50%; cursor: pointer;
+    border: 2px solid var(--bg-0);
+    box-shadow: 0 0 0 1px var(--accent-line), 0 2px 8px rgba(255, 48, 69, 0.34);
+    transition: transform .15s;
   }
-  .sel-range-wrap .range-val { font-size: 10px; color: #aaa; min-width: 26px; text-align: right; font-family: monospace; }
+  .sel-range-wrap input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  .sel-range-wrap input[type="range"]::-moz-range-thumb {
+    width: 11px; height: 11px; background: var(--accent); border: 2px solid var(--bg-0);
+    border-radius: 50%; box-shadow: 0 0 0 1px var(--accent-line);
+  }
+  .sel-range-wrap .range-val { font-size: 10px; color: var(--text-1); min-width: 30px; text-align: right; font-family: var(--font-mono); }
 
   #sel-material-preset {
-    padding: 3px 6px; border-radius: 4px; border: 1px solid #0f3460;
-    background: #1a1a2e; color: #eee; font-size: 11px; cursor: pointer; outline: none; flex: 1;
+    padding: 6px 26px 6px 9px; border-radius: var(--radius-s); border: 1px solid var(--line);
+    background-color: var(--bg-3);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239aa4b2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+    color: var(--text-0); font-size: 12px; font-family: var(--font-ui); cursor: pointer; outline: none; flex: 1;
+    appearance: none; -webkit-appearance: none; transition: border-color .15s;
   }
+  #sel-material-preset:hover { border-color: var(--line-strong); }
+  #sel-material-preset:focus { border-color: var(--accent-line); }
+  #sel-material-preset option { background: var(--bg-2); color: var(--text-0); }
 
   /* ============ VISIBILITY ============ */
-  #vis-list { max-height: 160px; overflow-y: auto; margin-bottom: 6px; }
+  #vis-list { max-height: 170px; overflow-y: auto; margin-bottom: 6px; padding-right: 2px; flex-shrink: 0; }
   .vis-item {
-    display: flex; align-items: center; padding: 2px 4px; font-size: 11px;
-    border-radius: 3px; cursor: default; gap: 6px;
+    display: flex; align-items: center; padding: 4px 6px; font-size: 11px;
+    border-radius: var(--radius-s); cursor: pointer; gap: 8px; transition: background .15s;
   }
-  .vis-item:hover { background: rgba(233,69,96,0.06); }
-  .vis-item .vis-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-  .vis-item .vis-name { flex: 1; color: #bbb; }
-  .vis-item .vis-cnt { color: #666; font-size: 10px; min-width: 24px; text-align: right; }
+  .vis-item:hover { background: var(--bg-3); }
+  .vis-item .vis-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+  .vis-item .vis-name { flex: 1; color: var(--text-1); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vis-item:hover .vis-name { color: var(--text-0); }
+  .vis-item .vis-cnt { color: var(--text-2); font-size: 10px; min-width: 26px; text-align: right; font-family: var(--font-mono); }
   .vis-item .vis-eye {
-    width: 20px; height: 18px; border: 1px solid #0f3460; border-radius: 3px;
+    width: 22px; height: 20px; border: 1px solid var(--line); border-radius: var(--radius-s);
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; cursor: pointer; background: transparent; color: #888; user-select: none;
-    line-height: 1;
+    cursor: pointer; background: transparent; color: var(--text-2); user-select: none;
+    line-height: 1; transition: border-color .15s, color .15s;
   }
-  .vis-item .vis-eye:hover { border-color: #e94560; color: #e94560; }
-  .vis-item .vis-eye.hidden { opacity: 0.3; }
+  .vis-item .vis-eye svg { width: 12px; height: 12px; }
+  .vis-item .vis-eye:hover { border-color: var(--accent-line); color: var(--accent); }
+  .vis-item .vis-eye.hidden { opacity: 0.35; }
   .vis-item.off .vis-name { opacity: 0.35; }
   .vis-item.off .vis-dot { opacity: 0.35; }
   .vis-item.off .vis-cnt { opacity: 0.35; }
 
   /* ============ STATISTICS ============ */
-  #stats-wrap { max-height: 160px; overflow-y: auto; margin-bottom: 6px; }
-  .stat-item { display: flex; justify-content: space-between; padding: 2px 4px; font-size: 11px; }
-  .stat-item .st-type { color: #999; }
-  .stat-item .st-num { color: #e94560; font-weight: 600; }
-  .stat-item .st-pct { color: #555; font-size: 10px; }
+  #stats-wrap { max-height: 170px; overflow-y: auto; margin-bottom: 6px; padding-right: 2px; flex-shrink: 0; }
+  .stat-item { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 6px; font-size: 11px; border-radius: var(--radius-s); }
+  .stat-item:hover { background: var(--bg-3); }
+  .stat-item .st-type { color: var(--text-1); font-family: var(--font-mono); }
+  .stat-item .st-num { color: var(--accent); font-weight: 600; font-family: var(--font-mono); }
+  .stat-item .st-pct { color: var(--text-2); font-size: 10px; font-family: var(--font-mono); margin-left: 6px; }
 
   /* ============ DRAG & DROP ============ */
   #drop-zone {
-    border: 2px dashed #0f3460; border-radius: 8px; padding: 14px 10px;
+    border: 1.5px dashed var(--line-strong); border-radius: var(--radius-l); padding: 18px 12px;
     text-align: center; cursor: pointer; transition: all .25s;
-    margin-bottom: 6px; background: rgba(15, 52, 96, 0.15);
+    margin-bottom: 8px; background: var(--bg-2);
   }
-  #drop-zone:hover, #drop-zone.drag-over {
-    border-color: #e94560; background: rgba(233, 69, 96, 0.08);
+  #drop-zone:hover { border-color: var(--accent-line); background: var(--bg-3); }
+  #drop-zone.drag-over {
+    border-color: var(--accent); background: var(--accent-dim);
+    transform: scale(1.015); box-shadow: 0 0 28px rgba(255, 48, 69, 0.12);
   }
-  #drop-zone.drag-over { transform: scale(1.02); }
-  .drop-zone-icon { font-size: 22px; margin-bottom: 4px; }
-  .drop-zone-text { font-size: 12px; color: #aaa; font-weight: 500; }
-  .drop-zone-sub { font-size: 10px; color: #555; margin-top: 3px; }
-  #browse-link { color: #e94560; cursor: pointer; text-decoration: underline; }
-  #browse-link:hover { color: #ff6b8a; }
+  .drop-zone-icon { display: flex; justify-content: center; color: var(--accent); margin-bottom: 8px; }
+  .drop-zone-icon svg { width: 24px; height: 24px; }
+  .drop-zone-text { font-size: 12px; color: var(--text-1); font-weight: 500; }
+  .drop-zone-sub { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-2); margin-top: 5px; }
+  #browse-link { color: var(--accent); cursor: pointer; border-bottom: 1px dashed var(--accent-line); transition: color .15s; }
+  #browse-link:hover { color: var(--accent-strong); border-bottom-style: solid; }
 
   #drop-status {
-    display: none; padding: 6px 8px; border-radius: 6px; font-size: 11px;
-    margin-bottom: 6px; text-align: center;
+    display: none; padding: 8px 10px; border-radius: var(--radius-m); font-size: 11px;
+    margin-bottom: 8px; text-align: center; line-height: 1.45;
   }
-  #drop-status.success { display: block; background: #1a2e1a; border: 1px solid #2ea043; color: #3fb950; }
-  #drop-status.error { display: block; background: #2a1515; border: 1px solid #e94560; color: #ff6b6b; }
+  #drop-status.success { display: block; background: var(--ok-dim); border: 1px solid var(--ok-line); color: var(--ok); }
+  #drop-status.error { display: block; background: var(--err-dim); border: 1px solid var(--err-line); color: var(--err); }
 
   #copy-status {
-    display: none; padding: 6px 8px; border-radius: 6px; font-size: 11px;
-    margin-bottom: 6px; text-align: center;
+    display: none; padding: 8px 10px; border-radius: var(--radius-m); font-size: 11px;
+    margin-bottom: 8px; text-align: center;
   }
-  #copy-status.show { display: block; background: #1a2e1a; border: 1px solid #2ea043; color: #3fb950; }
+  #copy-status.show { display: block; background: var(--ok-dim); border: 1px solid var(--ok-line); color: var(--ok); }
+  #copy-status.error { display: block; background: var(--err-dim); border: 1px solid var(--err-line); color: var(--err); }
 
-  /* scrollbar styling */
-  #vis-list::-webkit-scrollbar, #stats-wrap::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
-  #vis-list::-webkit-scrollbar-track, #stats-wrap::-webkit-scrollbar-track, #sidebar::-webkit-scrollbar-track { background: #1a1a2e; }
-  #vis-list::-webkit-scrollbar-thumb, #stats-wrap::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+  /* ============ SCROLLBARS ============ */
+  #vis-list::-webkit-scrollbar, #stats-wrap::-webkit-scrollbar, #sidebar::-webkit-scrollbar, #changelog-content::-webkit-scrollbar { width: 5px; }
+  #vis-list::-webkit-scrollbar-track, #stats-wrap::-webkit-scrollbar-track, #sidebar::-webkit-scrollbar-track, #changelog-content::-webkit-scrollbar-track { background: transparent; }
+  #vis-list::-webkit-scrollbar-thumb, #stats-wrap::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb, #changelog-content::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 999px; }
+  #vis-list::-webkit-scrollbar-thumb:hover, #stats-wrap::-webkit-scrollbar-thumb:hover, #sidebar::-webkit-scrollbar-thumb:hover, #changelog-content::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
 
-  .blocks-green { color: #3fb950 !important; }
-  .blocks-yellow { color: #d29922 !important; }
-  .blocks-red { color: #f85149 !important; }
+  .blocks-green { color: var(--ok) !important; }
+  .blocks-yellow { color: var(--warn) !important; }
+  .blocks-red { color: var(--err) !important; }
 
   #undo-btn { position: relative; }
   #undo-btn .undo-count {
-    font-size: 9px; background: #e94560; color: #fff; border-radius: 8px;
-    padding: 1px 5px; margin-left: 4px; font-weight: 700;
+    font-family: var(--font-mono); font-size: 9px; background: var(--accent); color: var(--accent-ink);
+    border-radius: 999px; padding: 1px 6px; margin-left: 2px; font-weight: 600;
   }
 
-  @media (max-width: 640px) {
-    #sidebar { width: 100%; height: auto; max-height: 240px; padding: 10px; }
-    #canvas-container, #canvas-loading { left: 0; top: 240px; }
-  }
-
-  #recent-builds { margin-bottom: 8px; }
+  /* ============ RECENT BUILDS ============ */
+  #recent-builds { margin-bottom: 10px; }
   #recent-builds .section-title { margin-top: 0; }
   .recent-item {
-    display: flex; align-items: center; padding: 6px 8px; margin-bottom: 4px;
-    background: #1a1a2e; border: 1px solid #0f3460; border-radius: 5px;
-    cursor: pointer; transition: all .2s; font-size: 11px; gap: 8px;
+    display: flex; align-items: center; padding: 8px 10px; margin-bottom: 6px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-m);
+    cursor: pointer; transition: border-color .18s, background .18s, transform .18s; font-size: 11px; gap: 8px;
   }
-  .recent-item:hover { border-color: #e94560; background: rgba(233,69,96,0.06); }
-  .recent-item .recent-name { flex: 1; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .recent-item .recent-parts { color: #e94560; font-weight: 600; font-size: 10px; white-space: nowrap; }
-  .recent-item .recent-date { color: #555; font-size: 9px; white-space: nowrap; }
-  .recent-item .recent-dropdown { color: #888; font-size: 10px; margin-left: -2px; }
+  .recent-item:hover { border-color: var(--accent-line); background: var(--bg-3); transform: translateX(2px); }
+  .recent-item .recent-name { flex: 1; color: var(--text-0); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-item .recent-parts { color: var(--accent); font-weight: 600; font-size: 10px; white-space: nowrap; font-family: var(--font-mono); }
+  .recent-item .recent-date { color: var(--text-2); font-size: 9px; white-space: nowrap; font-family: var(--font-mono); }
+  .recent-item .recent-dropdown { color: var(--text-2); display: flex; align-items: center; flex-shrink: 0; }
+  .recent-item .recent-dropdown svg { width: 10px; height: 10px; }
+
+  /* ============ CHANGELOG MODAL ============ */
+  #changelog-modal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(4, 5, 7, 0.72); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  .modal-panel {
+    background: var(--bg-1); border: 1px solid var(--line-strong); border-radius: var(--radius-l);
+    max-width: 620px; width: 92%; max-height: 80vh; overflow: hidden;
+    display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  }
+  .modal-head {
+    padding: 15px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-head h2 { color: var(--text-0); font-size: 15px; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  #changelog-close {
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--text-1);
+    width: 28px; height: 28px; border-radius: var(--radius-s); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: all .15s;
+  }
+  #changelog-close:hover { color: var(--text-0); border-color: var(--line-strong); background: var(--bg-3); }
+  #changelog-close svg { width: 13px; height: 13px; }
+  #changelog-content { overflow-y: auto; padding: 12px 16px 16px; flex: 1; }
+
+  @media (max-width: 720px) {
+    #sidebar { width: 100%; height: auto; max-height: 260px; padding: 12px; border-right: none; border-bottom: 1px solid var(--line); }
+    #canvas-container, #canvas-loading { left: 0; top: 260px; }
+    #scale-control { left: 14px; bottom: 14px; width: min(250px, calc(100vw - 28px)); }
+    #motor-preview-control { left: 14px; bottom: 103px; width: min(250px, calc(100vw - 28px)); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
 
 <div id="sidebar">
-  <h1>&#9881; Model Editor</h1>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+    </div>
+    <h1>babft to pc converter</h1>
+  </div>
   <div class="subtitle">Select &bull; Move &bull; Rotate &bull; Delete</div>
 
   <!-- ============ RECENT BUILDS ============ -->
@@ -239,9 +487,11 @@
 
   <!-- ============ DRAG & DROP ZONE ============ -->
   <div id="drop-zone">
-    <div class="drop-zone-icon">&#128194;</div>
+    <div class="drop-zone-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    </div>
     <div class="drop-zone-text">Drop .json or .build file here</div>
-    <div class="drop-zone-sub">Supports standard &amp; BuilderHub v2 &bull; <span id="browse-link">browse</span></div>
+    <div class="drop-zone-sub">Standard &amp; BuilderHub v2 &bull; <span id="browse-link">browse files</span></div>
     <input type="file" id="file-input" accept=".json,.build,.bhbuild,.txt" style="display:none">
   </div>
   <div id="drop-status"></div>
@@ -262,7 +512,7 @@
   <div id="sel-panel">
     <div class="section-title">Selection Info</div>
     <div class="sel-row"><span class="sel-lbl">Type:</span><span id="sel-type-name">-</span></div>
-    <div class="sel-row"><span class="sel-lbl">Exp. Blocks:</span><span id="sel-exp-blocks" style="color:#e94560; font-weight:600;">-</span></div>
+    <div class="sel-row"><span class="sel-lbl">Exp. Blocks:</span><span id="sel-exp-blocks" style="color:var(--accent); font-weight:600; font-family:var(--font-mono);">-</span></div>
     <div class="sel-row">
       <span class="sel-lbl">Color:</span>
       <input type="color" id="sel-color-picker" value="#ffffff">
@@ -271,45 +521,52 @@
     <div class="sel-row">
       <span class="sel-lbl">Material:</span>
       <select id="sel-material-preset">
-        <option value="">Preset…</option>
-        <option value="default">Default</option>
-        <option value="metallic">Metallic</option>
-        <option value="rough">Rough</option>
-        <option value="glossy">Glossy</option>
-        <option value="glass">Glass-like</option>
+        <option value="">Select type…</option>
       </select>
     </div>
-    <div class="sel-row">
-      <span class="sel-lbl">Roughness:</span>
-      <div class="sel-range-wrap">
-        <input type="range" id="sel-roughness" min="0" max="1" step="0.01" value="0.5">
-        <span class="range-val" id="sel-roughness-val">0.50</span>
-      </div>
-    </div>
-    <div class="sel-row">
-      <span class="sel-lbl">Metalness:</span>
-      <div class="sel-range-wrap">
-        <input type="range" id="sel-metalness" min="0" max="1" step="0.01" value="0.1">
-        <span class="range-val" id="sel-metalness-val">0.10</span>
-      </div>
-    </div>
   </div>
 
   <div class="btn-row">
-    <button class="sidebar-btn danger" id="btn-delete" disabled style="flex:1">&#128465; Delete</button>
-    <button class="sidebar-btn" id="undo-btn" disabled style="flex:1">&#8617; Undo</button>
+    <button class="sidebar-btn danger" id="btn-delete" disabled style="flex:1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+      Delete
+    </button>
+    <button class="sidebar-btn" id="undo-btn" disabled style="flex:1">Undo</button>
   </div>
   <div class="btn-row">
-    <button class="sidebar-btn" id="toggle-wireframe" style="flex:1">&#9874; Wire</button>
+    <button class="sidebar-btn" id="toggle-wireframe" style="flex:1">Wireframe</button>
   </div>
-  <button class="sidebar-btn" id="toggle-transparent">&#9673; Show Transparent</button>
-  <button class="sidebar-btn primary" id="btn-save" disabled>&#128190; Save Modified JSON</button>
+  <button class="sidebar-btn" id="toggle-transparent">Show Transparent</button>
+  <button class="sidebar-btn primary" id="btn-save" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+    Save Modified JSON
+  </button>
 
   <div class="btn-row">
-    <button class="sidebar-btn" id="btn-copy-s1" disabled style="flex:1">&#128203; Copy Script 1</button>
-    <button class="sidebar-btn" id="btn-copy-s2" disabled style="flex:1">&#128203; Copy Script 2</button>
+    <button class="sidebar-btn" id="btn-copy-s1" disabled style="flex:1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+      Copy Script 1
+    </button>
+    <button class="sidebar-btn" id="btn-copy-s2" disabled style="flex:1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+      Copy Script 2
+    </button>
   </div>
   <div id="copy-status"></div>
+
+  <!-- === GROUPS === -->
+  <div class="section-title" style="margin-top:12px">Groups <span style="color:var(--text-2);font-weight:400">(Shift+G)</span></div>
+  <div id="groups-list"><div style="color:var(--text-2); font-size:11px; padding:4px 6px;">Select 2+ parts, press Shift+G</div></div>
+  <div class="btn-row">
+    <button class="sidebar-btn accent" id="btn-add-motor" disabled style="flex:1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M6 12h12"/></svg>
+      Add Motor
+    </button>
+    <button class="sidebar-btn danger" id="btn-ungroup" disabled style="flex:1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      Ungroup
+    </button>
+  </div>
 
   <!-- === VISIBILITY === -->
   <div class="section-title">Visibility by Type</div>
@@ -319,15 +576,41 @@
   <div class="section-title">Type Breakdown</div>
   <div id="stats-wrap"></div>
 
-  <button class="sidebar-btn" id="btn-changelog">&#128220; Changelog</button>
+  <button class="sidebar-btn" id="btn-changelog">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+    Changelog
+  </button>
 
   <div class="footer">
-    Click=Select &bull; Shift+click=Toggle &bull; Drag=Marquee &bull; Right-drag=Orbit &bull; R+arrows=Rotate &bull; Ctrl+Z=Undo
+    <span><kbd>Click</kbd> select</span>
+    <span><kbd>Shift+Click</kbd> toggle</span>
+    <span><kbd>Drag</kbd> marquee</span>
+    <span><kbd>R-Drag</kbd> orbit</span>
+    <span><kbd>R</kbd> toggle move/rotate</span>
+    <span><kbd>Shift</kbd> snap gizmo</span>
+    <span><kbd>Shift+G</kbd> group</span>
+    <span><kbd>Ctrl+Z</kbd> undo</span>
   </div>
 </div>
 
 <div id="canvas-container"></div>
 <div id="marquee-box"></div>
+<div id="scale-control" aria-label="Build size control">
+  <div class="scale-control-head">
+    <span class="scale-control-title">Build size</span>
+    <output id="scale-value" for="build-scale">100%</output>
+  </div>
+  <input id="build-scale" type="range" min="5" max="200" step="1" value="100" aria-label="Build size percentage">
+  <div class="scale-control-range"><span>5%</span><span>smaller build = fewer blocks</span><span>200%</span></div>
+</div>
+<div id="motor-preview-control" aria-label="Motor spin preview">
+  <button id="motor-preview-toggle" type="button">Preview motor spin</button>
+  <div class="motor-speed-row">
+    <label for="motor-preview-speed">Speed</label>
+    <input id="motor-preview-speed" type="range" min="5" max="180" step="5" value="45">
+    <output id="motor-preview-rpm" for="motor-preview-speed">45 RPM</output>
+  </div>
+</div>
 
 <div id="canvas-loading">
   <div class="spinner-lg"></div>
@@ -335,14 +618,16 @@
 </div>
 
 <!-- === CHANGELOG MODAL === -->
-<div id="changelog-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
-  <div style="background:#16213e; border:1px solid #0f3460; border-radius:8px; max-width:600px; width:90%; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
-    <div style="padding:16px; border-bottom:1px solid #0f3460; display:flex; justify-content:space-between; align-items:center;">
-      <h2 style="color:#e94560; font-size:18px; margin:0;">Changelog</h2>
-      <button id="changelog-close" style="background:none; border:none; color:#eee; font-size:20px; cursor:pointer;">&times;</button>
+<div id="changelog-modal">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>Changelog</h2>
+      <button id="changelog-close" aria-label="Close changelog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
     </div>
-    <div id="changelog-content" style="overflow-y:auto; padding:16px; flex:1;">
-      <div style="text-align:center; color:#888;">Loading...</div>
+    <div id="changelog-content">
+      <div style="text-align:center; color:var(--text-2); padding:24px 0; font-size:12px;">Loading...</div>
     </div>
   </div>
 </div>
@@ -359,6 +644,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 
 // ========================================================================
 //  CONSTANTS
@@ -475,6 +761,43 @@ function parseColor(str) {
   return new THREE.Color(p[0], p[1], p[2]);
 }
 
+function calculateModelOrigin(parts) {
+  const origin = new THREE.Vector3();
+  let count = 0;
+  for (const part of parts || []) {
+    if (part._motorFlag) continue;
+    const pos = parseVec3(part.Position);
+    if (!pos) continue;
+    origin.add(pos);
+    count++;
+  }
+  return count > 0 ? origin.multiplyScalar(1 / count) : new THREE.Vector3();
+}
+
+function ensureModelOrigin(info) {
+  if (!info) return new THREE.Vector3();
+  if (info.modelOrigin && info.modelOrigin.isVector3) return info.modelOrigin;
+
+  const raw = info.rawData;
+  let stored = null;
+  if (raw && !Array.isArray(raw) && typeof raw === 'object') stored = raw._modelOrigin;
+  if (!stored && Array.isArray(raw) && raw[1] && typeof raw[1] === 'object') stored = raw[1]._modelOrigin;
+
+  info.modelOrigin = parseVec3(stored) || calculateModelOrigin(info.parts);
+  return info.modelOrigin;
+}
+
+function ensureBuildScale(info) {
+  if (!info) return 1;
+  if (Number.isFinite(info.buildScale) && info.buildScale > 0) return info.buildScale;
+  const raw = info.rawData;
+  const stored = raw && !Array.isArray(raw) && typeof raw === 'object'
+    ? Number(raw._buildScale)
+    : NaN;
+  info.buildScale = Number.isFinite(stored) && stored > 0 ? stored : 1;
+  return info.buildScale;
+}
+
 function hexToThreeColor(hex) {
   return new THREE.Color(hex);
 }
@@ -493,17 +816,24 @@ function vec3ToStr(v) {
 }
 
 function radToDegStr(euler) {
-  const x = roundN(euler.x * 180 / Math.PI, 6);
-  const y = roundN(euler.y * 180 / Math.PI, 6);
-  const z = roundN(euler.z * 180 / Math.PI, 6);
+  // Force XYZ order for consistent round-trip
+  const e = euler.order === 'XYZ' ? euler : new THREE.Euler(euler.x, euler.y, euler.z, 'XYZ');
+  const x = roundN(e.x * 180 / Math.PI, 6);
+  const y = roundN(e.y * 180 / Math.PI, 6);
+  const z = roundN(e.z * 180 / Math.PI, 6);
   return `${x},${y},${z}`;
 }
 
 // ========================================================================
 //  EXPANDED BLOCK COUNT (max 2.5 studs per axis)
 // ========================================================================
-
+const MOTOR_HEIGHT_ABOVE_CENTER = 10; // studs: group center -> motor
+const MOTOR_MAIN_SIZE = new THREE.Vector3(2.5, 0.3, 2.5);
+const MOTOR_OTHER_SIZE = new THREE.Vector3(1.3, 2.2, 1.3);
+const GRID_BELOW_MODEL_ORIGIN = 20;
 const MAX_STUD = 2.5;
+
+
 
 function splitAxis(total) {
   const pieces = [];
@@ -694,7 +1024,7 @@ function parseModel(data) {
 
   // Format: Object { type: [parts] } - including CFrame format
   for (const key of Object.keys(data)) {
-    typeOrder.push(key);
+    if (Array.isArray(data[key])) typeOrder.push(key);
   }
   for (const [type, list] of Object.entries(data)) {
     if (Array.isArray(list)) {
@@ -751,7 +1081,7 @@ function parseModel(data) {
 const container = document.getElementById('canvas-container');
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
+scene.background = new THREE.Color(0x000000);
 
 const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
 camera.position.set(15, 12, 20);
@@ -762,7 +1092,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.65;
 container.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -781,14 +1111,101 @@ controls.touches = {
   TWO: THREE.TOUCH.DOLLY_PAN
 };
 
+// --- Transform Gizmo (move/rotate selected parts) ---
+
+console.log('Creating TransformControls...');
+const gizmoPivot = new THREE.Group();
+gizmoPivot.visible = false;
+scene.add(gizmoPivot);
+
+let transformControls;
+try {
+  transformControls = new TransformControls(camera, renderer.domElement);
+  transformControls.setSize(0.8);
+  transformControls.setMode('translate');
+  transformControls.depthTest = false;
+  transformControls.detach();
+  transformControls.detach();
+scene.add(transformControls.getHelper());   // was: scene.add(transformControls);
+console.log('TransformControls created, size=2.0, depthTest=false');
+  console.log('TransformControls created, size=2.0, depthTest=false');
+} catch (e) {
+  console.error('Failed to create TransformControls:', e);
+}
+
+let gizmoMode = 'translate';      // 'translate' | 'rotate'
+let gizmoDragging = false;       // true while gizmo is being dragged
+let gizmoJustReleased = false;   // true between gizmo release and next pointerdown
+let gizmoPivotStart = null;       // snapshot of pivot transform at drag start
+let gizmoMeshStart = new Map();   // mesh -> { position: Vector3, rotation: Euler } at drag start
+
+// Disable orbit while dragging the gizmo
+transformControls.addEventListener('dragging-changed', (e) => {
+  controls.enabled = !e.value;
+  gizmoDragging = e.value;
+  if (e.value) {
+    // Drag started: snapshot pivot + each mesh transform
+    saveUndoSnapshot();
+    gizmoPivotStart = {
+      position: gizmoPivot.position.clone(),
+      quaternion: gizmoPivot.quaternion.clone(),
+    };
+    gizmoMeshStart.clear();
+    for (const mesh of selectedMeshes) {
+      mesh.rotation.order = 'XYZ';
+      gizmoMeshStart.set(mesh, {
+        position: mesh.position.clone(),
+        quaternion: mesh.quaternion.clone(),
+      });
+    }
+  } else {
+    // Drag ended: sync selected part data into _data and panel
+    syncSelectedPartData();
+    updateSelectionPanel();
+    gizmoPivotStart = null;
+    gizmoMeshStart.clear();
+    gizmoJustReleased = true;
+  }
+});
+
+// Live update: apply pivot delta to every selected mesh
+transformControls.addEventListener('objectChange', () => {
+  if (!gizmoPivotStart || selectedMeshes.size === 0) return;
+
+  const deltaPos = new THREE.Vector3().subVectors(gizmoPivot.position, gizmoPivotStart.position);
+  const deltaQuat = new THREE.Quaternion().multiplyQuaternions(
+    gizmoPivot.quaternion,
+    gizmoPivotStart.quaternion.clone().invert()
+  );
+
+  for (const mesh of selectedMeshes) {
+    const start = gizmoMeshStart.get(mesh);
+    if (!start) continue;
+
+if (gizmoMode === 'translate') {
+      mesh.position.copy(start.position).add(deltaPos);
+    } else {
+      // Rotate the mesh's offset-from-pivot around the pivot, then apply rotation delta
+      const offset = new THREE.Vector3().subVectors(start.position, gizmoPivotStart.position);
+      offset.applyQuaternion(deltaQuat);
+      mesh.position.copy(gizmoPivot.position).add(offset);
+
+      mesh.quaternion.multiplyQuaternions(deltaQuat, start.quaternion);
+      // Ensure rotation Euler is synced in XYZ order for consistent exports
+      mesh.rotation.order = 'XYZ';
+      mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
+    }
+  }
+});
+
 // --- Lighting ---
 
-scene.add(new THREE.AmbientLight(0x404060, 0.6));
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
 
-const hemi = new THREE.HemisphereLight(0x87CEEB, 0x3a2a1a, 0.8);
+const hemi = new THREE.HemisphereLight(0xf2f6ff, 0x303238, 1.25);
 scene.add(hemi);
 
-const dir = new THREE.DirectionalLight(0xffeedd, 2.5);
+const dir = new THREE.DirectionalLight(0xffffff, 3.4);
 dir.position.set(20, 30, 20);
 dir.castShadow = true;
 dir.shadow.mapSize.width = 2048;
@@ -801,18 +1218,19 @@ dir.shadow.camera.top = 30;
 dir.shadow.camera.bottom = -30;
 scene.add(dir);
 
-const fill = new THREE.DirectionalLight(0x8888ff, 0.5);
+const fill = new THREE.DirectionalLight(0xcad8ff, 1.15);
 fill.position.set(-15, 10, -15);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+const rim = new THREE.DirectionalLight(0xffffff, 0.9);
 rim.position.set(-5, -10, 20);
 scene.add(rim);
 
 // --- Grid ---
 
-const grid = new THREE.GridHelper(40, 20, 0x444466, 0x333355);
+const grid = new THREE.GridHelper(40, 20, 0x3a1218, 0x171012);
 grid.position.y = -0.01;
+grid.visible = false;
 scene.add(grid);
 
 // ========================================================================
@@ -820,12 +1238,279 @@ scene.add(grid);
 // ========================================================================
 
 let modelGroup = null;
+let centerMarker = null;
 let isWireframe = false;
 let showTransparent = false;
 let currentModelInfo = null;
 const selectedMeshes = new Set();
 const keysDown = new Set();
 const hiddenTypes = new Set();
+
+// ========================================================================
+//  GROUPS & MOTOR SYSTEM
+// ========================================================================
+
+let groups = []; // [{ id, color, partIndices[], motor: { stationaryIdx, rotatingIdx }|null }]
+let groupIdCounter = 0;
+
+const GROUP_PREVIEW_COLORS = [
+  '#ff4054', '#39d98a', '#4da3ff', '#ffb020', '#b875ff',
+  '#27d4d4', '#ff72b6', '#9bd34f', '#ff7a45', '#7f8cff'
+];
+
+function getGroupColor() {
+  return GROUP_PREVIEW_COLORS[groups.length % GROUP_PREVIEW_COLORS.length];
+}
+
+function getNextMotorLookupIndex() {
+  let highest = 0;
+  for (const group of groups) {
+    highest = Math.max(highest, Number(group.motor?.colorIndex) || 0);
+  }
+  return highest + 1;
+}
+
+function findGroupForPart(partIndex) {
+  if (!currentModelInfo || partIndex === undefined) return null;
+  const gid = currentModelInfo.parts[partIndex]._groupId;
+  if (!gid) return null;
+  return groups.find(g => g.id === gid) || null;
+}
+
+function groupSelectedParts() {
+  if (selectedMeshes.size < 2 || !currentModelInfo) return;
+  saveUndoSnapshot();
+
+  const indices = [];
+  for (const mesh of selectedMeshes) {
+    const idx = mesh.userData.partIndex;
+    if (idx !== undefined) {
+      const existingGroup = findGroupForPart(idx);
+      if (existingGroup) {
+        existingGroup.partIndices = existingGroup.partIndices.filter(i => i !== idx);
+        if (existingGroup.partIndices.length === 0) {
+          groups = groups.filter(g => g.id !== existingGroup.id);
+        }
+      }
+      indices.push(idx);
+    }
+  }
+
+  const color = getGroupColor();
+  const groupId = ++groupIdCounter;
+  const group = { id: groupId, color, partIndices: [...indices], motor: null };
+  groups.push(group);
+
+  const tc = new THREE.Color(color);
+  for (const idx of indices) {
+    const part = currentModelInfo.parts[idx];
+    part._groupId = groupId;
+    if (part._mesh) {
+      const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
+      mat.color.set(color);
+    }
+    // Keep original _data.Color for export — only change visual
+  }
+
+  renderGroupsUI();
+  updateSelectionPanel();
+}
+function addMotorToGroup(groupId) {
+  const group = groups.find(g => g.id === groupId);
+  if (!group || group.motor || !currentModelInfo) return;
+
+  saveUndoSnapshot();
+
+  const centroid = new THREE.Vector3();
+  const groupParts = group.partIndices.map(i => currentModelInfo.parts[i]).filter(p => p && p._mesh);
+  let count = 0;
+  for (const p of groupParts) {
+    centroid.add(p._mesh.position);
+    count++;
+  }
+  if (count === 0) return;
+  centroid.divideScalar(count);
+
+  const tc = new THREE.Color(group.color);
+  const previewColor = `${tc.r},${tc.g},${tc.b}`;
+  const motorColorIndex = getNextMotorLookupIndex();
+  // Keep the exported lookup colors exact and sequential for Script 2 while
+  // using the bright group color only for the website preview.
+  const lookupColor = `0,0,${motorColorIndex}`;
+
+  // motor sits straight UP from the group's center now, not to the side
+  const motorPos = centroid.clone().add(new THREE.Vector3(0, MOTOR_HEIGHT_ABOVE_CENTER, 0));
+  const mainSizeStr = vec3ToStr(MOTOR_MAIN_SIZE);
+  const otherSizeStr = vec3ToStr(MOTOR_OTHER_SIZE);
+
+  const stationaryPos = motorPos.clone();
+  const stationaryPart = {
+    _type: 'Motor',
+    _data: { Position: vec3ToStr(stationaryPos), Rotation: '0,0,0', Size: mainSizeStr, Color: lookupColor },
+    Position: vec3ToStr(stationaryPos), Rotation: '0,0,0', Size: mainSizeStr, Color: previewColor,
+    _motorFlag: 'stationary',
+    _motorForGroup: groupId,   // <-- links this motor piece back to the real group
+  };
+
+  const rotatingPos = motorPos.clone();
+  // The two real motor pieces touch face-to-face, so their center spacing is
+  // half the Main thickness plus half the Other height: 0.15 + 1.10 = 1.25.
+  rotatingPos.y += MOTOR_MAIN_SIZE.y / 2 + MOTOR_OTHER_SIZE.y / 2;
+  const rotatingPart = {
+    _type: 'Motor',
+    _data: { Position: vec3ToStr(rotatingPos), Rotation: '0,0,0', Size: otherSizeStr, Color: lookupColor },
+    Position: vec3ToStr(rotatingPos), Rotation: '0,0,0', Size: otherSizeStr, Color: previewColor,
+    _motorFlag: 'rotating',
+    _motorForGroup: groupId,   // <-- same here
+  };
+
+  if (!currentModelInfo.typeOrder.includes('Motor')) {
+    currentModelInfo.typeOrder.push('Motor');
+  }
+
+  // Main+Other still share their own internal groupId so they drag together in the editor
+  const motorInternalGroup = ++groupIdCounter;
+  stationaryPart._groupId = motorInternalGroup;
+  rotatingPart._groupId = motorInternalGroup;
+
+  currentModelInfo.parts.push(stationaryPart);
+  currentModelInfo.parts.push(rotatingPart);
+  group.motor = { groupId, colorIndex: motorColorIndex };
+
+  // Adding a motor must not move the selected body. The group remains exactly
+  // where the user placed it; Script 2 keeps this motor-to-group offset.
+
+  // Clear stale selection (old meshes are about to be replaced)
+  clearSelection();
+
+  const savedPos = camera.position.clone();
+  const savedTarget = controls.target.clone();
+  buildScene(currentModelInfo.parts);
+  camera.position.copy(savedPos);
+  controls.target.copy(savedTarget);
+  controls.update();
+  rebuildUI();
+  renderGroupsUI();
+}
+
+function selectGroupMembers(groupId) {
+  const group = groups.find(g => g.id === groupId);
+  if (!group || !currentModelInfo) return;
+  clearSelection();
+  for (const idx of group.partIndices) {
+    const part = currentModelInfo.parts[idx];
+    if (part && part._mesh && part._mesh.visible) {
+      selectMesh(part._mesh, true);
+    }
+  }
+}
+
+function ungroupSelectedParts() {
+  saveUndoSnapshot();
+  const affectedGroupIds = new Set();
+  for (const mesh of selectedMeshes) {
+    const idx = mesh.userData.partIndex;
+    if (idx === undefined || !currentModelInfo) continue;
+    const part = currentModelInfo.parts[idx];
+    if (part._groupId) {
+      affectedGroupIds.add(part._groupId);
+      delete part._groupId;
+      const defaultColor = getDefaultColor(part._type);
+      if (part._mesh) {
+        const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
+        mat.color.set(defaultColor);
+      }
+      // Restore mesh to original color from _data if available
+      const origColor = parseColor(part._data.Color);
+      if (origColor && part._mesh) {
+        const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
+        mat.color.copy(origColor);
+      }
+    }
+  }
+
+  for (const gid of affectedGroupIds) {
+    const group = groups.find(g => g.id === gid);
+    if (group) {
+      group.partIndices = group.partIndices.filter(i => currentModelInfo.parts[i]._groupId === gid);
+      if (group.partIndices.length === 0) {
+        groups = groups.filter(g => g.id !== gid);
+      }
+    }
+  }
+
+  groups = groups.filter(g => g.partIndices.length > 0);
+  renderGroupsUI();
+  updateSelectionPanel();
+}
+
+function renderGroupsUI() {
+  const container = document.getElementById('groups-list');
+  const motorBtn = document.getElementById('btn-add-motor');
+  const ungroupBtn = document.getElementById('btn-ungroup');
+  if (!container) return;
+
+  if (groups.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-2); font-size:11px; padding:4px 6px;">No groups yet</div>';
+    if (motorBtn) motorBtn.disabled = true;
+    if (ungroupBtn) ungroupBtn.disabled = true;
+    return;
+  }
+
+  let html = '';
+  for (const g of groups) {
+    html += `<div class="group-item" data-group-id="${g.id}">
+      <span class="group-dot" style="background:${g.color}"></span>
+      <span class="group-info">Group ${g.id} ${g.motor ? '<span class="group-motor-badge">Motor</span>' : ''}</span>
+      <span class="group-parts">${g.partIndices.length}p</span>
+    </div>`;
+  }
+  container.innerHTML = html;
+
+  for (const el of container.querySelectorAll('.group-item')) {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.group-ungroup')) return;
+      const gid = parseInt(el.dataset.groupId);
+      selectGroupMembers(gid);
+    });
+  }
+
+  if (motorBtn) motorBtn.disabled = groups.filter(g => !g.motor).length === 0;
+  if (ungroupBtn) ungroupBtn.disabled = selectedMeshes.size === 0;
+}
+
+function refreshGroups() {
+  if (!currentModelInfo) return;
+  const groupMap = {};
+  for (let i = 0; i < currentModelInfo.parts.length; i++) {
+    const gid = currentModelInfo.parts[i]._groupId;
+    if (gid) {
+      if (!groupMap[gid]) groupMap[gid] = { partIndices: [], color: null, allMotor: true };
+      groupMap[gid].partIndices.push(i);
+      if (!currentModelInfo.parts[i]._motorFlag) groupMap[gid].allMotor = false;
+      if (!groupMap[gid].color) {
+        const mesh = currentModelInfo.parts[i]._mesh;
+        if (mesh) {
+          const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+          groupMap[gid].color = '#' + new THREE.Color(mat.color).getHexString();
+        }
+      }
+    }
+  }
+  const newGroups = [];
+  for (const [gidStr, info] of Object.entries(groupMap)) {
+    const gid = parseInt(gidStr);
+    if (info.allMotor) continue; // skip motor-only internal groups
+    const existing = groups.find(g => g.id === gid);
+    if (existing) {
+      existing.partIndices = info.partIndices;
+      newGroups.push(existing);
+    } else {
+      newGroups.push({ id: gid, color: info.color || getGroupColor(), partIndices: info.partIndices, motor: null });
+    }
+  }
+  groups = newGroups.filter(g => g.partIndices.length > 0);
+}
 
 const MAX_UNDO = 10;
 let undoHistory = [];
@@ -862,6 +1547,13 @@ const btnCopyS2 = document.getElementById('btn-copy-s2');
 const copyStatus = document.getElementById('copy-status');
 const canvasLoading = document.getElementById('canvas-loading');
 const marqueeBox = document.getElementById('marquee-box');
+const scaleControl = document.getElementById('scale-control');
+const buildScaleSlider = document.getElementById('build-scale');
+const buildScaleValue = document.getElementById('scale-value');
+const motorPreviewControl = document.getElementById('motor-preview-control');
+const motorPreviewToggle = document.getElementById('motor-preview-toggle');
+const motorPreviewSpeed = document.getElementById('motor-preview-speed');
+const motorPreviewRpm = document.getElementById('motor-preview-rpm');
 
 // Selection panel
 const selPanel = document.getElementById('sel-panel');
@@ -869,15 +1561,209 @@ const selTypeName = document.getElementById('sel-type-name');
 const selExpBlocks = document.getElementById('sel-exp-blocks');
 const selColorPicker = document.getElementById('sel-color-picker');
 const selColorHex = document.getElementById('sel-color-hex');
-const selRoughness = document.getElementById('sel-roughness');
-const selRoughnessVal = document.getElementById('sel-roughness-val');
-const selMetalness = document.getElementById('sel-metalness');
-const selMetalnessVal = document.getElementById('sel-metalness-val');
 const selMatPreset = document.getElementById('sel-material-preset');
 
 // Visibility & Stats
 const visList = document.getElementById('vis-list');
 const statsWrap = document.getElementById('stats-wrap');
+
+function updateBuildScaleControl() {
+  if (!currentModelInfo) {
+    scaleControl.classList.remove('show');
+    return;
+  }
+  const percent = Math.round(ensureBuildScale(currentModelInfo) * 100);
+  buildScaleSlider.value = String(percent);
+  buildScaleValue.value = `${percent}%`;
+  const fill = ((percent - 5) / (200 - 5)) * 100;
+  buildScaleSlider.style.setProperty('--scale-fill', `${Math.max(0, Math.min(100, fill))}%`);
+  scaleControl.classList.add('show');
+}
+
+function applyBuildScale(percent) {
+  if (!currentModelInfo) return;
+  stopMotorPreview();
+  const clampedPercent = Math.max(5, Math.min(200, Number(percent) || 100));
+  const nextScale = clampedPercent / 100;
+  const previousScale = ensureBuildScale(currentModelInfo);
+  if (Math.abs(nextScale - previousScale) < 1e-9) {
+    updateBuildScaleControl();
+    return;
+  }
+
+  const factor = nextScale / previousScale;
+  const origin = ensureModelOrigin(currentModelInfo);
+
+  for (const part of currentModelInfo.parts) {
+    const mesh = part._mesh;
+    const oldPos = mesh ? mesh.position.clone() : parseVec3(part.Position);
+    if (oldPos) {
+      const newPos = oldPos.sub(origin).multiplyScalar(factor).add(origin);
+      const posStr = vec3ToStr(newPos);
+      part.Position = posStr;
+      if (mesh) mesh.position.copy(newPos);
+      if (part._data) {
+        part._data.Position = posStr;
+        if (currentModelInfo.format === 'flat-array') {
+          part._data[1] = [roundN(newPos.x, 6), roundN(newPos.y, 6), roundN(newPos.z, 6)];
+        }
+      }
+    }
+
+    // Real motor hardware has a fixed size. Its position scales with the build,
+    // but only regular build pieces are resized.
+    if (!part._motorFlag) {
+      const oldSize = parseVec3(part.Size);
+      if (oldSize) {
+        const newSize = oldSize.multiplyScalar(factor);
+        const sizeStr = vec3ToStr(newSize);
+        part.Size = sizeStr;
+        if (mesh) mesh.scale.multiplyScalar(factor);
+        if (part._data) {
+          part._data.Size = Array.isArray(part._data.Size)
+            ? [roundN(newSize.x, 6), roundN(newSize.y, 6), roundN(newSize.z, 6)]
+            : sizeStr;
+          if (currentModelInfo.format === 'flat-array') {
+            part._data[4] = [roundN(newSize.x, 6), roundN(newSize.y, 6), roundN(newSize.z, 6)];
+          }
+        }
+      }
+    }
+  }
+
+  currentModelInfo.buildScale = nextScale;
+  updateBuildScaleControl();
+  updateStatsNumbers();
+  rebuildStats();
+  updateSelectionPanel();
+}
+
+let scaleGestureHasSnapshot = false;
+function snapshotBeforeScaleGesture() {
+  if (!currentModelInfo || scaleGestureHasSnapshot) return;
+  saveUndoSnapshot();
+  scaleGestureHasSnapshot = true;
+}
+
+buildScaleSlider.addEventListener('pointerdown', snapshotBeforeScaleGesture);
+buildScaleSlider.addEventListener('input', () => applyBuildScale(buildScaleSlider.value));
+buildScaleSlider.addEventListener('pointerup', () => { scaleGestureHasSnapshot = false; });
+buildScaleSlider.addEventListener('pointercancel', () => { scaleGestureHasSnapshot = false; });
+buildScaleSlider.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (!e.repeat) snapshotBeforeScaleGesture();
+});
+buildScaleSlider.addEventListener('keyup', (e) => {
+  e.stopPropagation();
+  scaleGestureHasSnapshot = false;
+});
+
+let motorPreviewActive = false;
+let motorPreviewEntries = [];
+let motorPreviewAngle = 0;
+let motorPreviewLastTime = 0;
+
+function updateMotorPreviewControl() {
+  const hasMotors = !!currentModelInfo && groups.some(group => group.motor);
+  motorPreviewControl.classList.toggle('show', hasMotors);
+  if (!hasMotors && motorPreviewActive) stopMotorPreview();
+}
+
+function createMotorPreviewEntries() {
+  const entries = [];
+  if (!currentModelInfo) return entries;
+
+  for (const group of groups) {
+    if (!group.motor) continue;
+    const rotatingPart = currentModelInfo.parts.find(part =>
+      part._motorForGroup === group.id && part._motorFlag === 'rotating'
+    );
+    if (!rotatingPart?._mesh) continue;
+
+    const pivot = rotatingPart._mesh.position.clone();
+    const axis = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(rotatingPart._mesh.quaternion)
+      .normalize();
+    const members = [];
+
+    for (const index of group.partIndices) {
+      const mesh = currentModelInfo.parts[index]?._mesh;
+      if (!mesh) continue;
+      members.push({
+        mesh,
+        position: mesh.position.clone(),
+        quaternion: mesh.quaternion.clone(),
+      });
+    }
+
+    // Motor.Other spins around its own shaft as well.
+    members.push({
+      mesh: rotatingPart._mesh,
+      position: rotatingPart._mesh.position.clone(),
+      quaternion: rotatingPart._mesh.quaternion.clone(),
+    });
+
+    if (members.length > 1) entries.push({ pivot, axis, members });
+  }
+  return entries;
+}
+
+function startMotorPreview() {
+  stopMotorPreview();
+  clearSelection();
+  motorPreviewEntries = createMotorPreviewEntries();
+  if (motorPreviewEntries.length === 0) return;
+  motorPreviewActive = true;
+  motorPreviewAngle = 0;
+  motorPreviewLastTime = 0;
+  motorPreviewToggle.classList.add('active');
+  motorPreviewToggle.textContent = 'Stop motor preview';
+}
+
+function stopMotorPreview() {
+  if (motorPreviewEntries.length > 0) {
+    for (const entry of motorPreviewEntries) {
+      for (const member of entry.members) {
+        if (!member.mesh) continue;
+        member.mesh.position.copy(member.position);
+        member.mesh.quaternion.copy(member.quaternion);
+      }
+    }
+  }
+  motorPreviewActive = false;
+  motorPreviewEntries = [];
+  motorPreviewAngle = 0;
+  motorPreviewLastTime = 0;
+  motorPreviewToggle.classList.remove('active');
+  motorPreviewToggle.textContent = 'Preview motor spin';
+}
+
+function updateMotorPreview(timeMs) {
+  if (!motorPreviewActive) return;
+  if (!motorPreviewLastTime) motorPreviewLastTime = timeMs;
+  const deltaSeconds = Math.min(0.05, Math.max(0, (timeMs - motorPreviewLastTime) / 1000));
+  motorPreviewLastTime = timeMs;
+  const rpm = Number(motorPreviewSpeed.value) || 45;
+  motorPreviewAngle = (motorPreviewAngle + deltaSeconds * rpm * Math.PI * 2 / 60) % (Math.PI * 2);
+
+  for (const entry of motorPreviewEntries) {
+    const rotationDelta = new THREE.Quaternion().setFromAxisAngle(entry.axis, motorPreviewAngle);
+    for (const member of entry.members) {
+      const offset = member.position.clone().sub(entry.pivot).applyQuaternion(rotationDelta);
+      member.mesh.position.copy(entry.pivot).add(offset);
+      member.mesh.quaternion.multiplyQuaternions(rotationDelta, member.quaternion);
+    }
+  }
+}
+
+motorPreviewToggle.addEventListener('click', () => {
+  if (motorPreviewActive) stopMotorPreview();
+  else startMotorPreview();
+});
+motorPreviewSpeed.addEventListener('input', () => {
+  motorPreviewRpm.value = `${motorPreviewSpeed.value} RPM`;
+});
+motorPreviewSpeed.addEventListener('keydown', e => e.stopPropagation());
 
 // ========================================================================
 //  MODEL LOADING / BUILDING
@@ -923,6 +1809,8 @@ function clearModel() {
     modelGroup = null;
   }
   currentModelInfo = null;
+  if (centerMarker) centerMarker.visible = false;
+  updateBuildScaleControl();
   hiddenTypes.clear();
   undoHistory = [];
   updateUndoButton();
@@ -948,6 +1836,67 @@ function disposeGroup(group) {
       }
     }
   });
+}
+
+function createCenterMarker() {
+  const marker = new THREE.Group();
+  marker.name = 'FixedHalfPlateWeldCenter';
+
+  const geometry = new THREE.BoxGeometry(2.5, 0.5, 2.5);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xff1010,
+    emissive: 0x8a0000,
+    emissiveIntensity: 1.2,
+    transparent: true,
+    opacity: 0.38,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const plate = new THREE.Mesh(geometry, material);
+  plate.renderOrder = 1000;
+  marker.add(plate);
+
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geometry),
+    new THREE.LineBasicMaterial({ color: 0xff5555, transparent: true, opacity: 1, depthTest: false })
+  );
+  edges.renderOrder = 1001;
+  marker.add(edges);
+
+  const crossGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-1.75, 0, 0), new THREE.Vector3(1.75, 0, 0),
+    new THREE.Vector3(0, -1.25, 0), new THREE.Vector3(0, 1.25, 0),
+    new THREE.Vector3(0, 0, -1.75), new THREE.Vector3(0, 0, 1.75),
+  ]);
+  const cross = new THREE.LineSegments(
+    crossGeometry,
+    new THREE.LineBasicMaterial({ color: 0xff2020, depthTest: false })
+  );
+  cross.renderOrder = 1002;
+  marker.add(cross);
+
+  marker.visible = false;
+  scene.add(marker);
+  return marker;
+}
+
+function updateCenterMarker() {
+  if (!centerMarker) centerMarker = createCenterMarker();
+  if (!currentModelInfo) {
+    centerMarker.visible = false;
+    grid.visible = false;
+    return;
+  }
+  const origin = ensureModelOrigin(currentModelInfo);
+  centerMarker.position.copy(origin);
+  centerMarker.quaternion.identity();
+  centerMarker.visible = true;
+
+  // Keep the ground preview centered beneath the fixed HalfPlate weld origin.
+  // Builds often use coordinates far away from world zero, which previously
+  // left the grid floating off to one side of the model.
+  grid.position.set(origin.x, origin.y - GRID_BELOW_MODEL_ORIGIN, origin.z);
+  grid.visible = true;
 }
 
 function computeFilteredBounds(parts) {
@@ -1038,11 +1987,17 @@ function buildScene(parts) {
 
     const rot = parseVec3(part.Rotation);
     if (rot) {
+      mesh.rotation.order = 'XYZ';
       mesh.rotation.set(
         rot.x * Math.PI / 180,
         rot.y * Math.PI / 180,
         rot.z * Math.PI / 180
       );
+    }
+    // Prefer stored quaternion for exact rotation preservation
+    if (part._quaternion) {
+      mesh.quaternion.fromArray(part._quaternion);
+      mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
     }
 
     if (part.ShowShadow !== undefined) {
@@ -1066,6 +2021,8 @@ function buildScene(parts) {
   }
 
   scene.add(modelGroup);
+  updateCenterMarker();
+  updateBuildScaleControl();
 
   const bounds = computeFilteredBounds(parts);
   if (bounds.hasBounds) {
@@ -1092,8 +2049,26 @@ function selectMesh(mesh, additive) {
   if (!mesh || selectedMeshes.has(mesh)) return;
   selectedMeshes.add(mesh);
   highlightMesh(mesh, true);
+
+  // Auto-select other group members
+  if (currentModelInfo) {
+    const partIdx = mesh.userData.partIndex;
+    if (partIdx !== undefined) {
+      const gid = currentModelInfo.parts[partIdx]._groupId;
+      if (gid) {
+        for (const p of currentModelInfo.parts) {
+          if (p._groupId === gid && p._mesh && p._mesh !== mesh && p._mesh.visible && !selectedMeshes.has(p._mesh)) {
+            selectedMeshes.add(p._mesh);
+            highlightMesh(p._mesh, true);
+          }
+        }
+      }
+    }
+  }
+
   updateSelectionUI();
   updateSelectionPanel();
+  updateGizmo();
 }
 
 function deselectMesh(mesh) {
@@ -1102,6 +2077,7 @@ function deselectMesh(mesh) {
   highlightMesh(mesh, false);
   updateSelectionUI();
   updateSelectionPanel();
+  updateGizmo();
 }
 
 function toggleMesh(mesh) {
@@ -1114,6 +2090,59 @@ function clearSelection() {
   selectedMeshes.clear();
   updateSelectionUI();
   updateSelectionPanel();
+  updateGizmo();
+}
+
+// --- Gizmo update: position the invisible pivot at the centroid of selected meshes ---
+function updateGizmo() {
+  console.log('updateGizmo called, selectedMeshes.size =', selectedMeshes.size);
+  if (selectedMeshes.size === 0) {
+    transformControls.detach();
+    gizmoPivot.visible = false;
+    gizmoPivot.position.set(0, 0, 0);
+    gizmoPivot.quaternion.identity();
+    return;
+  }
+
+  // Centroid of selected parts (world == local since modelGroup is untransformed)
+  const centroid = new THREE.Vector3();
+  let count = 0;
+  for (const mesh of selectedMeshes) {
+    centroid.add(mesh.position);
+    count++;
+  }
+  centroid.multiplyScalar(1 / count);
+
+  console.log('Setting gizmo at centroid:', centroid);
+
+  // Reset pivot transform so dragging starts from a clean slate
+  gizmoPivot.position.copy(centroid);
+  gizmoPivot.quaternion.identity();
+  gizmoPivot.visible = true;
+  gizmoPivot.updateMatrix();
+
+  transformControls.attach(gizmoPivot);
+  transformControls.setMode(gizmoMode);
+  console.log('Gizmo attached, mode:', gizmoMode);
+}
+
+// Sync each selected mesh's transform back into its part _data
+function syncSelectedPartData() {
+  if (!currentModelInfo) return;
+  for (const mesh of selectedMeshes) {
+    const idx = mesh.userData.partIndex;
+    if (idx === undefined) continue;
+    const p = currentModelInfo.parts[idx];
+    if (!p) continue;
+    const posStr = vec3ToStr(mesh.position);
+    const rotStr = radToDegStr(mesh.rotation);
+    p._data.Position = posStr;
+    p._data.Rotation = rotStr;
+    p.Position = posStr;
+    p.Rotation = rotStr;
+    // Preserve exact quaternion to avoid Euler round-trip drift
+    p._quaternion = [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
+  }
 }
 
 function highlightMesh(mesh, on) {
@@ -1138,7 +2167,7 @@ function highlightMesh(mesh, on) {
     // Edge outline lines (cyan)
     const edges = new THREE.EdgesGeometry(mesh.geometry);
     const lineMat = new THREE.LineBasicMaterial({
-      color: 0x00eeff,
+      color: 0xff3045,
       transparent: true,
       opacity: 0.85,
     });
@@ -1158,6 +2187,8 @@ function updateSelectionUI() {
   btnSave.disabled = !currentModelInfo;
   btnCopyS1.disabled = !currentModelInfo;
   btnCopyS2.disabled = !currentModelInfo;
+  const ungroupBtn = document.getElementById('btn-ungroup');
+  if (ungroupBtn) ungroupBtn.disabled = n === 0;
 }
 
 // ========================================================================
@@ -1209,12 +2240,6 @@ function updateSelectionPanel() {
   selColorPicker.value = hex;
   selColorHex.textContent = hex;
 
-  // Roughness / Metalness
-  selRoughness.value = mat.roughness;
-  selRoughnessVal.textContent = mat.roughness.toFixed(2);
-  selMetalness.value = mat.metalness;
-  selMetalnessVal.textContent = mat.metalness.toFixed(2);
-
   // Reset preset dropdown
   selMatPreset.value = '';
 }
@@ -1235,47 +2260,60 @@ selColorPicker.addEventListener('input', () => {
   }
 });
 
-selRoughness.addEventListener('input', () => {
-  saveUndoSnapshotThrottled();
-  const v = parseFloat(selRoughness.value);
-  selRoughnessVal.textContent = v.toFixed(2);
-  for (const mesh of selectedMeshes) {
-    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    mat.roughness = v;
-  }
-});
-
-selMetalness.addEventListener('input', () => {
-  saveUndoSnapshotThrottled();
-  const v = parseFloat(selMetalness.value);
-  selMetalnessVal.textContent = v.toFixed(2);
-  for (const mesh of selectedMeshes) {
-    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    mat.metalness = v;
-  }
-});
-
 selMatPreset.addEventListener('change', () => {
-  const preset = selMatPreset.value;
-  if (!preset) return;
+  const newType = selMatPreset.value;
+  if (!newType) return;
   saveUndoSnapshot();
-  const vals = MATERIAL_PRESETS[preset];
-  if (!vals) return;
 
-  selRoughness.value = vals.roughness;
-  selRoughnessVal.textContent = vals.roughness.toFixed(2);
-  selMetalness.value = vals.metalness;
-  selMetalnessVal.textContent = vals.metalness.toFixed(2);
+  const newRoughness = getTypeRoughness(newType);
+  const newMetalness = getTypeMetalness(newType);
 
   for (const mesh of selectedMeshes) {
+    const idx = mesh.userData.partIndex;
+    if (idx === undefined || !currentModelInfo.parts[idx]) continue;
+    const part = currentModelInfo.parts[idx];
+    part._type = newType;
+    // Keep the existing color — don't overwrite it
+    if (part._data) part._data._blockType = newType;
+
     const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    mat.roughness = vals.roughness;
-    mat.metalness = vals.metalness;
+    mat.roughness = newRoughness;
+    mat.metalness = newMetalness;
   }
 
-  // Reset the dropdown after applying
+  // Refresh UI
+  rebuildUI();
+  updateSelectionPanel();
+
+  // Reset the dropdown
   setTimeout(() => { selMatPreset.value = ''; }, 0);
 });
+
+function getTypeRoughness(type) {
+  if (/Metal|Gold|Titanium/i.test(type)) return 0.2;
+  if (/Glass|Ice/i.test(type)) return 0.05;
+  if (/Wood|Plastic|Fabric|Coal/i.test(type)) return 0.8;
+  return 0.5;
+}
+
+function getTypeMetalness(type) {
+  if (/Metal|Gold|Titanium/i.test(type)) return 0.9;
+  return 0.05;
+}
+
+function populateTypeSelect() {
+  if (!currentModelInfo) return;
+  const CORE = ['GlassBlock', 'MetalBlock', 'PlasticBlock'];
+  const currentVal = selMatPreset.value;
+  selMatPreset.innerHTML = '<option value="">Select type…</option>';
+  for (const type of CORE) {
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = type;
+    selMatPreset.appendChild(opt);
+  }
+  if (currentVal && CORE.includes(currentVal)) selMatPreset.value = currentVal;
+}
 
 // ========================================================================
 //  CLICK / MARQUEE SELECTION
@@ -1287,15 +2325,20 @@ let pointerDownPos = { x: 0, y: 0 };
 let isPointerDown = false;
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
+  console.log('pointerdown', e.button, 'gizmoDragging=', gizmoDragging); // TEMP DEBUG
   if (e.button !== 0) return;
+  gizmoJustReleased = false;
+  if (gizmoDragging) return;
   const rect = container.getBoundingClientRect();
   pointerDownPos.x = e.clientX - rect.left;
   pointerDownPos.y = e.clientY - rect.top;
   isPointerDown = true;
+  console.log('isPointerDown set to true'); // TEMP DEBUG
 });
 
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (!isPointerDown || e.button !== 0) return;
+  if (isPointerDown) console.log('pointermove while down', e.button, e.buttons); // TEMP DEBUG
+  if (!isPointerDown || !(e.buttons & 1) || gizmoDragging) return;
   const rect = container.getBoundingClientRect();
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
@@ -1308,7 +2351,10 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (e.button !== 0) return;
+  const wasGizmoDrag = gizmoDragging || gizmoJustReleased;
+  gizmoJustReleased = false;
   isPointerDown = false;
+  if (wasGizmoDrag) return;
 
   const rect = container.getBoundingClientRect();
   const upX = e.clientX - rect.left;
@@ -1371,13 +2417,17 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 });
 
 function drawMarquee(x1, y1, x2, y2) {
+  console.log('drawMarquee called', x1, y1, x2, y2); // TEMP DEBUG
   const rect = container.getBoundingClientRect();
   const left = Math.min(x1, x2) + rect.left;
   const top = Math.min(y1, y2) + rect.top;
+  const width = Math.abs(x2 - x1);
+  const height = Math.abs(y2 - y1);
+  
   marqueeBox.style.left = left + 'px';
   marqueeBox.style.top = top + 'px';
-  marqueeBox.style.width = Math.abs(x2 - x1) + 'px';
-  marqueeBox.style.height = Math.abs(y2 - y1) + 'px';
+  marqueeBox.style.width = width + 'px';
+  marqueeBox.style.height = height + 'px';
   marqueeBox.style.display = 'block';
 }
 
@@ -1431,6 +2481,7 @@ function deleteSelected() {
 
   selectedMeshes.clear();
   updateSelectionUI();
+  updateGizmo();
 
   // Preserve camera state across rebuild
   const savedPos = camera.position.clone();
@@ -1463,12 +2514,18 @@ function saveModel() {
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
-  for (const p of parts) {
+  parts.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
+	p._data._idx = i;
+if (p._groupId) p._data._groupId = p._groupId;
+if (p._motorFlag) p._data._motorFlag = p._motorFlag;
+if (p._motorForGroup) p._data._motorForGroup = p._motorForGroup;
     grouped[p._type].push(p._data);
-  }
+  });
 
   const output = {};
+  output._modelOrigin = vec3ToStr(ensureModelOrigin(currentModelInfo));
+  output._buildScale = ensureBuildScale(currentModelInfo);
   for (const type of typeOrder) {
     if (grouped[type].length > 0) {
       output[type] = grouped[type];
@@ -1493,15 +2550,21 @@ function saveModel() {
 
 function rebuildUI() {
   if (!currentModelInfo) return;
+  refreshGroups();
   rebuildVisibility();
   rebuildStats();
   updateStatsNumbers();
+  populateTypeSelect();
+  renderGroupsUI();
 }
 
 function getTypeColor(type) {
   const c = DEFAULT_COLORS[type] || 0x999999;
   return '#' + new THREE.Color(c).getHexString();
 }
+
+const EYE_OPEN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
 
 function rebuildVisibility() {
   if (!currentModelInfo) return;
@@ -1524,7 +2587,7 @@ function rebuildVisibility() {
       <span class="vis-dot" style="background:${getTypeColor(type)}"></span>
       <span class="vis-name">${type}</span>
       <span class="vis-cnt">${count}</span>
-      <span class="vis-eye${hidden ? ' hidden' : ''}" data-type="${type}">${hidden ? '&#9679;' : '&#9678;'}</span>
+      <span class="vis-eye${hidden ? ' hidden' : ''}" data-type="${type}">${hidden ? EYE_OFF_SVG : EYE_OPEN_SVG}</span>
     `;
 
     div.querySelector('.vis-eye').addEventListener('click', (e) => {
@@ -1596,7 +2659,7 @@ function rebuildStats() {
       <span class="st-type" style="${hidden ? 'opacity:0.35' : ''}">${type}</span>
       <span><span class="st-num">${cnt}</span>
       <span class="st-pct">${pct}%</span>
-      <span class="st-pct" style="color:#e94560; margin-left:4px;">(${exp.toLocaleString()} blocks)</span></span>
+      <span class="st-pct" style="color:var(--accent); margin-left:4px;">(${exp.toLocaleString()} blocks)</span></span>
     </div>`;
   }
 
@@ -1659,6 +2722,8 @@ function serializePartsData() {
       const rot = mesh.rotation;
       p.Position = vec3ToStr(pos);
       p.Rotation = radToDegStr(rot);
+      // Preserve exact quaternion for exact round-trip
+      p._quaternion = [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
       if (p._data) {
         p._data.Position = p.Position;
         p._data.Rotation = p.Rotation;
@@ -1666,7 +2731,7 @@ function serializePartsData() {
           p._data[1] = [roundN(pos.x, 6), roundN(pos.y, 6), roundN(pos.z, 6)];
         }
         const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-        if (mat && mat.color) {
+        if (mat && mat.color && !p._groupId) {
           const cr = roundN(mat.color.r, 6);
           const cg = roundN(mat.color.g, 6);
           const cb = roundN(mat.color.b, 6);
@@ -1693,11 +2758,19 @@ function serializePartsData() {
       Color: p.Color,
       Transparency: p.Transparency,
       ShowShadow: p.ShowShadow,
+      _groupId: p._groupId || null,
+      _motorFlag: p._motorFlag || null,
+      _motorForGroup: p._motorForGroup || null,
+      _quaternion: p._quaternion ? [...p._quaternion] : null,
     })),
     format: currentModelInfo.format,
     fileName: currentModelInfo.fileName,
     isV2Format: currentModelInfo.isV2Format,
     v2Metadata: currentModelInfo.v2Metadata ? JSON.parse(JSON.stringify(currentModelInfo.v2Metadata)) : null,
+    modelOrigin: vec3ToStr(ensureModelOrigin(currentModelInfo)),
+    buildScale: ensureBuildScale(currentModelInfo),
+    groups: JSON.parse(JSON.stringify(groups)),
+    groupIdCounter,
   };
 }
 
@@ -1714,9 +2787,9 @@ function updateUndoButton() {
   const n = undoHistory.length;
   undoBtn.disabled = n === 0;
   if (n > 0) {
-    undoBtn.innerHTML = `&#8617; Undo<span class="undo-count">${n}</span>`;
+    undoBtn.innerHTML = `Undo<span class="undo-count">${n}</span>`;
   } else {
-    undoBtn.innerHTML = '&#8617; Undo';
+    undoBtn.innerHTML = 'Undo';
   }
 }
 
@@ -1731,6 +2804,8 @@ function performUndo() {
   currentModelInfo.fileName = snapshot.fileName;
   currentModelInfo.isV2Format = snapshot.isV2Format;
   currentModelInfo.v2Metadata = snapshot.v2Metadata;
+  currentModelInfo.modelOrigin = parseVec3(snapshot.modelOrigin) || calculateModelOrigin(snapshot.parts);
+  currentModelInfo.buildScale = Number(snapshot.buildScale) || 1;
   currentModelInfo.parts.length = 0;
   for (const s of snapshot.parts) {
     currentModelInfo.parts.push({
@@ -1742,8 +2817,15 @@ function performUndo() {
       Color: s.Color,
       Transparency: s.Transparency,
       ShowShadow: s.ShowShadow,
+      _groupId: s._groupId,
+      _motorFlag: s._motorFlag,
+      _motorForGroup: s._motorForGroup,
+      _quaternion: s._quaternion ? [...s._quaternion] : null,
     });
   }
+
+  groups = snapshot.groups || [];
+  groupIdCounter = snapshot.groupIdCounter || 0;
 
   const savedPos = camera.position.clone();
   const savedTarget = controls.target.clone();
@@ -1767,6 +2849,11 @@ undoBtn.addEventListener('click', performUndo);
 document.addEventListener('keydown', (e) => {
   keysDown.add(e.key);
 
+  if (e.key === 'Shift') {
+    transformControls.setTranslationSnap(0.25);
+    transformControls.setRotationSnap(THREE.MathUtils.degToRad(15));
+  }
+
   if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     performUndo();
@@ -1779,11 +2866,27 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (selectedMeshes.size > 0 && e.key.startsWith('Arrow')) {
+  // R toggles gizmo mode between translate and rotate (only when parts selected)
+  if ((e.key === 'r' || e.key === 'R') && selectedMeshes.size > 0 && !gizmoDragging) {
+    gizmoMode = gizmoMode === 'translate' ? 'rotate' : 'translate';
+    transformControls.setMode(gizmoMode);
+    updateSelectionPanel();
+    e.preventDefault();
+    return;
+  }
+
+  // Shift+G: group selected parts
+  if ((e.key === 'g' || e.key === 'G') && e.shiftKey && selectedMeshes.size >= 2) {
+    e.preventDefault();
+    groupSelectedParts();
+    return;
+  }
+
+  if (selectedMeshes.size > 0 && e.key.startsWith('Arrow') && !gizmoDragging) {
     e.preventDefault();
     saveUndoSnapshot();
 
-    const isRotate = keysDown.has('r') || keysDown.has('R');
+    const isRotate = gizmoMode === 'rotate';
     const shift = keysDown.has('Shift');
 
     let dx = 0, dy = 0, dz = 0;
@@ -1811,7 +2914,13 @@ document.addEventListener('keydown', (e) => {
 
     for (const mesh of selectedMeshes) {
       if (dx || dy || dz) mesh.position.x += dx, mesh.position.y += dy, mesh.position.z += dz;
-      if (rx || ry || rz) mesh.rotation.x += rx, mesh.rotation.y += ry, mesh.rotation.z += rz;
+      if (rx || ry || rz) {
+        // Apply incremental rotation via quaternion to avoid gimbal-lock drift
+        mesh.rotation.order = 'XYZ';
+        const qDelta = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'XYZ'));
+        mesh.quaternion.premultiply(qDelta);
+        mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
+      }
     }
 
     // Sync part data
@@ -1820,8 +2929,13 @@ document.addEventListener('keydown', (e) => {
       if (idx !== undefined && currentModelInfo) {
         const p = currentModelInfo.parts[idx];
         if (p) {
-          p._data.Position = vec3ToStr(mesh.position);
-          p._data.Rotation = radToDegStr(mesh.rotation);
+          const posStr = vec3ToStr(mesh.position);
+          const rotStr = radToDegStr(mesh.rotation);
+          p._data.Position = posStr;
+          p._data.Rotation = rotStr;
+          p.Position = posStr;
+          p.Rotation = rotStr;
+          p._quaternion = [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
         }
       }
     }
@@ -1830,6 +2944,10 @@ document.addEventListener('keydown', (e) => {
 
 document.addEventListener('keyup', (e) => {
   keysDown.delete(e.key);
+  if (e.key === 'Shift') {
+    transformControls.setTranslationSnap(null);
+    transformControls.setRotationSnap(null);
+  }
 });
 
 window.addEventListener('blur', () => { keysDown.clear(); });
@@ -1840,7 +2958,7 @@ window.addEventListener('blur', () => { keysDown.clear(); });
 
 wireBtn.addEventListener('click', () => {
   isWireframe = !isWireframe;
-  wireBtn.textContent = isWireframe ? '\u2694 Wire' : '\u2694 Wire';
+  wireBtn.textContent = 'Wireframe';
   wireBtn.classList.toggle('active', isWireframe);
   if (modelGroup) {
     modelGroup.traverse(obj => {
@@ -1854,7 +2972,7 @@ wireBtn.addEventListener('click', () => {
 
 transparentBtn.addEventListener('click', () => {
   showTransparent = !showTransparent;
-  transparentBtn.textContent = showTransparent ? '\u25C9 Hide Transparent' : '\u25C9 Show Transparent';
+  transparentBtn.textContent = showTransparent ? 'Hide Transparent' : 'Show Transparent';
   transparentBtn.classList.toggle('active', showTransparent);
   if (modelGroup && currentModelInfo) {
     for (const p of currentModelInfo.parts) {
@@ -1877,6 +2995,18 @@ transparentBtn.addEventListener('click', () => {
 
 btnDelete.addEventListener('click', deleteSelected);
 btnSave.addEventListener('click', saveModel);
+
+// Motor & Ungroup buttons
+const btnAddMotor = document.getElementById('btn-add-motor');
+btnAddMotor.addEventListener('click', () => {
+  const groupsWithoutMotor = groups.filter(g => !g.motor);
+  if (groupsWithoutMotor.length === 0) return;
+  // Add motor to the first group without a motor
+  addMotorToGroup(groupsWithoutMotor[0].id);
+});
+
+const btnUngroup = document.getElementById('btn-ungroup');
+btnUngroup.addEventListener('click', ungroupSelectedParts);
 
 // --- Window resize ---
 
@@ -1904,9 +3034,10 @@ function animate() {
 
 animate();
 
+
 renderRecentBuilds();
 
-console.log('%c Roblox 3D Model Editor v2 ', 'background:#e94560;color:#fff;font-size:14px;padding:4px 8px;border-radius:4px;');
+console.log('%c Roblox 3D Model Editor v2 ', 'background:#ff3045;color:#ffffff;font-size:14px;padding:4px 8px;border-radius:4px;');
 console.log('Select a model to begin editing.');
 
 // ========================================================================
@@ -2077,7 +3208,7 @@ function renderRecentBuilds() {
     const d = new Date(b.ts);
     const dateStr = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     div.innerHTML = `
-      <span class="recent-dropdown">&#9660;</span>
+      <span class="recent-dropdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
       <span class="recent-name" title="${b.name}">${b.name}</span>
       <span class="recent-parts">${b.parts} parts</span>
       <span class="recent-date">${dateStr}</span>
@@ -2144,6 +3275,8 @@ function loadRecentBuildFile(build) {
 //  COPY SCRIPTS TO CLIPBOARD
 // ========================================================================
 
+
+
 const SCRIPT1_TEMPLATE = `local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2180,7 +3313,6 @@ local MATERIAL_MAP = {
 
 local function getMatCode(blockType, transparency)
     transparency = tonumber(transparency) or 0
-   
     if transparency > 0.5 then
         return "g"
     end
@@ -2196,7 +3328,7 @@ if type(source) == "table" then
     for blockType, blockList in pairs(source) do
         if type(blockList) == "table" then
             for _, block in ipairs(blockList) do
-                if type(block) == "table" then
+                if type(block) == "table" and not block._motorFlag then
                     block._blockType = blockType
                     table.insert(blocks, block)
                 end
@@ -2204,6 +3336,11 @@ if type(source) == "table" then
         end
     end
 end
+
+-- Sort strictly by original index
+table.sort(blocks, function(a, b)
+    return (a._idx or 0) < (b._idx or 0)
+end)
 
 local function parseVec3(str)
     local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
@@ -2244,14 +3381,13 @@ end
 local function expandBlocks(inputBlocks)
     local result = {}
     for _, block in ipairs(inputBlocks) do
-        if type(block) ~= "table" or not block.Size then
+        if type(block) ~= "table" or not block.Size or not block.Position then
             table.insert(result, block)
             continue
         end
         local size = parseVec3(block.Size)
-        local hasPos = block.Position ~= nil
-        local pos = hasPos and parseVec3(block.Position) or Vector3.new(0, 0, 0)
-        local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+        local pos  = parseVec3(block.Position)
+        local rot  = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
         local xPieces = splitAxis(size.X)
         local yPieces = splitAxis(size.Y)
         local zPieces = splitAxis(size.Z)
@@ -2272,9 +3408,7 @@ local function expandBlocks(inputBlocks)
                     local sub = {}
                     for k, v in pairs(block) do sub[k] = v end
                     sub.Size = string.format("%s,%s,%s", xSize, ySize, zSize)
-                    if hasPos then
-                        sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
-                    end
+                    sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
                     table.insert(result, sub)
                 end
             end
@@ -2289,6 +3423,10 @@ for _, obj in ipairs(aircraft:GetDescendants()) do
         table.insert(smallParts, obj)
     end
 end
+
+table.sort(smallParts, function(a, b)
+    return a:GetFullName() < b:GetFullName()
+end)
 
 local expandedBlocks = expandBlocks(blocks)
 
@@ -2349,24 +3487,28 @@ end
 
 print("Done! Configured", count, "SmallParts.")`;
 
-const SCRIPT2_TEMPLATE = `local HttpService = game:GetService("HttpService")
+const SCRIPT2_TEMPLATE = `
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
 
 local myplot = getMySpawnedPlot()
-
-Weld(myplot.PilotSeat.Seat,myplot.HalfPlate.BlockStd,CFrame.new(0,0,0))
 local player = Players.LocalPlayer
 local pname = player.Name
-
-local aircraft = workspace[pname .. " Aircraft"]
+local aircraft = workspace:WaitForChild(pname .. " Aircraft")
 local anchorBase = aircraft.HalfPlate.BlockStd
 
 local data = HttpService:JSONDecode([===[%DATA%]===])
 
+
+local MOTOR_EDITOR_FRAME_FIX = CFrame.Angles(math.rad(180), 0, 0)
+
+
 local blocks = {}
+local motorBlocks = {}
+local regularBlocks = {}
+
 local source = (type(data) == "table" and data[2]) or (type(data) == "table" and data[1]) or data
 
 if type(source) == "table" then
@@ -2376,15 +3518,30 @@ if type(source) == "table" then
                 if type(block) == "table" then
                     block._blockType = blockType
                     table.insert(blocks, block)
+                    if block._motorFlag then
+                        table.insert(motorBlocks, block)
+                    else
+                        table.insert(regularBlocks, block)
+                    end
                 end
             end
         end
     end
 end
 
+
+table.sort(regularBlocks, function(a, b)
+    return (a._idx or 0) < (b._idx or 0)
+end)
+
 local function parseVec3(str)
     local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
     return Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+end
+
+local function parseColor(str)
+    local r, g, b = str:match("([^,]+),([^,]+),([^,]+)")
+    return tonumber(r), tonumber(g), tonumber(b)
 end
 
 local function splitAxis(total)
@@ -2412,7 +3569,7 @@ end
 local function expandBlocks(inputBlocks)
     local result = {}
     for _, block in ipairs(inputBlocks) do
-        if type(block) ~= "table" or not block.Position or not block.Size then
+        if type(block) ~= "table" or not block.Size or not block.Position then
             table.insert(result, block)
             continue
         end
@@ -2435,10 +3592,10 @@ local function expandBlocks(inputBlocks)
                 for iz, zSize in ipairs(zPieces) do
                     local localOffset = Vector3.new(xOff[ix], yOff[iy], zOff[iz])
                     local worldOffset = rotCF:VectorToWorldSpace(localOffset)
-                    local subPos      = pos + worldOffset
+                    local subPos = pos + worldOffset
                     local sub = {}
                     for k, v in pairs(block) do sub[k] = v end
-                    sub.Size     = string.format("%s,%s,%s", xSize, ySize, zSize)
+                    sub.Size = string.format("%s,%s,%s", xSize, ySize, zSize)
                     sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
                     table.insert(result, sub)
                 end
@@ -2448,71 +3605,154 @@ local function expandBlocks(inputBlocks)
     return result
 end
 
-local expandedBlocks = expandBlocks(blocks)
-local needed = #expandedBlocks
+local function findMotorInPlot(r, g, b)
+    print(string.format("[MotorSearch] Looking for Color3.fromRGB(%d,%d,%d) ...", r, g, b))
+    for _, obj in pairs(myplot:GetDescendants()) do
+        if obj.Name == "Main" and (obj.Parent.Name == "MotorBlock" or obj.Parent.Name == "MotorBlock2") then
+            local c = obj.Color
+            if c == Color3.fromRGB(r, g, b) then
+                local otherPart = obj.Parent:FindFirstChild("Other")
+                if otherPart then
+                    print(string.format("[MotorSearch] FOUND! fromRGB(%d,%d,%d) at %s", r, g, b, obj.Parent:GetFullName()))
+                    return obj, otherPart
+                end
+            elseif c.R == r/255 and c.G == g/255 and c.B == b/255 then
+                local otherPart = obj.Parent:FindFirstChild("Other")
+                if otherPart then
+                    print(string.format("[MotorSearch] FOUND via new(%d,%d,%d) at %s", r, g, b, obj.Parent:GetFullName()))
+                    return obj, otherPart
+                end
+            end
+        end
+    end
+    warn(string.format("[MotorSearch] NOT FOUND for fromRGB(%d,%d,%d)", r, g, b))
+    return nil, nil
+end
 
-print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, needed))
 
--- Collect SPart parts from SmallPart models
+local motorMap = {}
+for _, b in ipairs(motorBlocks) do
+    local gid = b._motorForGroup
+    if gid then
+        if not motorMap[gid] then
+            local r, g, bl = parseColor(b.Color)
+            if r then
+                local mainPart, otherPart = findMotorInPlot(r, g, bl)
+                if mainPart and otherPart then
+                    motorMap[gid] = {
+                        main = mainPart,
+                        other = otherPart,
+                        otherFromMain = mainPart.CFrame:ToObjectSpace(otherPart.CFrame)
+                    }
+                    print(string.format("[Motor] group %s -> fromRGB(%d,%d,%d)", tostring(gid), r, g, bl))
+                end
+            end
+        end
+        if motorMap[gid] and b._motorFlag == "stationary" then
+            motorMap[gid].motorPos = parseVec3(b.Position) or Vector3.zero
+            motorMap[gid].motorRot = b.Rotation and parseVec3(b.Rotation) or Vector3.zero
+        end
+    end
+end
+
+
+local mainCentroid = Vector3.zero
+local mCount = 0
+local fixedModelOrigin = nil
+
+if type(data) == "table" and type(data._modelOrigin) == "string" then
+    fixedModelOrigin = parseVec3(data._modelOrigin)
+end
+
+if fixedModelOrigin then
+    mainCentroid = fixedModelOrigin
+else
+    for _, b in ipairs(regularBlocks) do
+        if b.Position then
+            local p = parseVec3(b.Position)
+            mainCentroid += p
+            mCount += 1
+        end
+    end
+    if mCount > 0 then mainCentroid = mainCentroid / mCount end
+end
+
+for gid, info in pairs(motorMap) do
+    info.main.CanCollide = false
+    info.other.CanCollide = false
+    Unweld(info.other)
+    local relPos = info.motorPos - mainCentroid
+    local motorRot = info.motorRot or Vector3.zero
+    local targetCF = CFrame.new(anchorBase.Position)
+        * CFrame.new(relPos)
+        * CFrame.Angles(math.rad(motorRot.X), math.rad(motorRot.Y), math.rad(motorRot.Z))
+        * MOTOR_EDITOR_FRAME_FIX
+    local weldOffset = anchorBase.CFrame:ToObjectSpace(targetCF)
+    info.targetOtherCF = targetCF * info.otherFromMain
+    Weld(anchorBase, info.main, weldOffset)
+    print(string.format("[MotorWeld] group %s: pos (%.2f,%.2f,%.2f), rot (%.1f,%.1f,%.1f)",
+        tostring(gid), relPos.X, relPos.Y, relPos.Z, motorRot.X, motorRot.Y, motorRot.Z))
+end
+
+local allExpanded = expandBlocks(regularBlocks)
+
 local allSmallParts = {}
-local allSmallPartModels = {}
 for _, obj in ipairs(aircraft:GetDescendants()) do
     if obj.Name == "SmallPart" and obj:IsA("Model") then
         local part = obj:FindFirstChild("SPart")
         if part then
             part.CanCollide = false
             table.insert(allSmallParts, part)
-            table.insert(allSmallPartModels, obj)
         end
     end
 end
 
+table.sort(allSmallParts, function(a, b)
+    return a:GetFullName() < b:GetFullName()
+end)
+
+local needed = #allExpanded
 local count = math.min(needed, #allSmallParts)
 
-print(string.format("SmallParts found: %d — only unwelding %d needed", #allSmallParts, count))
+print(string.format("Blocks: %d regular + %d motor -> %d expanded, %d SParts available",
+    #regularBlocks, #motorBlocks, needed, #allSmallParts))
 
 if needed > #allSmallParts then
-    warn(string.format("Need %d parts but only %d available - %d sub-blocks will be skipped!",
+    warn(string.format("Need %d parts but only %d available - %d will be skipped!",
         needed, #allSmallParts, needed - #allSmallParts))
 end
 
--- Only unweld the smallParts that will actually be used
+-- Unweld needed SParts
 for i = 1, count do
     Unweld(allSmallParts[i])
 end
 
-local centroid = Vector3.zero
-local validCount = 0
-for _, block in ipairs(blocks) do
-    if type(block) == "table" and block.Position then
-        centroid += parseVec3(block.Position)
-        validCount += 1
-    end
-end
-if validCount > 0 then centroid /= validCount end
-
 print("Welding", count, "parts...")
 
 for i = 1, count do
-    local block = expandedBlocks[i]
+    local block = allExpanded[i]
     if type(block) ~= "table" or not block.Position then continue end
+
+    local gid = block._groupId or "main"
+    local motorInfo = motorMap[gid]
+
+    local currentAnchor = (motorInfo and motorInfo.other) or anchorBase
+
     local pos = parseVec3(block.Position)
     local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
-    local worldCF   = CFrame.new(pos) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
-    local shiftedCF = CFrame.new(anchorBase.Position - centroid) * worldCF
-    local offset    = anchorBase.CFrame:ToObjectSpace(anchorBase.CFrame * anchorBase.CFrame:ToObjectSpace(shiftedCF))
-    ReplicatedStorage.BlockRemotes.MotorLock:FireServer(
-        "MotorWeld",
-        anchorBase,
-        true,
-        anchorBase,
-        allSmallParts[i],
-        offset,
-        true
-    )
+
+
+    local modelRelativeCF = CFrame.new(pos - mainCentroid)
+        * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+    local targetWorldCF = CFrame.new(anchorBase.Position) * modelRelativeCF
+    local anchorCF = (motorInfo and motorInfo.targetOtherCF) or anchorBase.CFrame
+    local offset = anchorCF:ToObjectSpace(targetWorldCF)
+
+    Weld(currentAnchor, allSmallParts[i], offset)
 end
 
-print("Done! Welded", count, "parts.")`;
+print("Done! Welded", count, "parts. Motors found:", #motorBlocks > 0 and table.concat({}, ",") or "none")
+`;
 
 function buildExportJSON() {
   if (!currentModelInfo) return null;
@@ -2528,12 +3768,18 @@ function buildExportJSON() {
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
-  for (const p of parts) {
+  parts.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
+    p._data._idx = i; // Store exact original index
+    if (p._groupId) p._data._groupId = p._groupId;
+    if (p._motorFlag) p._data._motorFlag = p._motorFlag;
+    if (p._motorForGroup) p._data._motorForGroup = p._motorForGroup;
     grouped[p._type].push(p._data);
-  }
+  });
 
   const output = {};
+  output._modelOrigin = vec3ToStr(ensureModelOrigin(currentModelInfo));
+  output._buildScale = ensureBuildScale(currentModelInfo);
   for (const type of typeOrder) {
     if (grouped[type].length > 0) {
       output[type] = grouped[type];
@@ -2589,7 +3835,7 @@ changelogModal.addEventListener('click', (e) => {
 });
 
 async function loadChangelog() {
-  changelogContent.innerHTML = '<div style="text-align:center; color:#888;">Loading...</div>';
+  changelogContent.innerHTML = '<div style="text-align:center; color:var(--text-2); padding:24px 0; font-size:12px;">Loading...</div>';
   
   try {
     const resp = await fetch('https://api.github.com/repos/7441ayaknitectemas/storage/commits?per_page=50');
@@ -2605,20 +3851,20 @@ async function loadChangelog() {
       const author = commit.commit.author.name;
       
       html += `
-        <div style="padding:12px; border-bottom:1px solid #0f3460; margin-bottom:8px;">
+        <div style="padding:12px 2px; border-bottom:1px solid var(--line); margin-bottom:4px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span style="color:#e94560; font-weight:600; font-size:13px;">${sha}</span>
-            <span style="color:#666; font-size:11px;">${date}</span>
+            <span style="color:var(--accent); font-weight:600; font-size:12px; font-family:var(--font-mono);">${sha}</span>
+            <span style="color:var(--text-2); font-size:10px; font-family:var(--font-mono);">${date}</span>
           </div>
-          <div style="color:#eee; font-size:13px; margin-bottom:4px;">${message}</div>
-          <div style="color:#888; font-size:11px;">by ${author}</div>
+          <div style="color:var(--text-0); font-size:13px; margin-bottom:4px; line-height:1.5;">${message}</div>
+          <div style="color:var(--text-2); font-size:11px;">by ${author}</div>
         </div>
       `;
     }
     
     changelogContent.innerHTML = html;
   } catch (err) {
-    changelogContent.innerHTML = '<div style="text-align:center; color:#ff6b6b;">Failed to load changelog</div>';
+    changelogContent.innerHTML = '<div style="text-align:center; color:var(--err); padding:24px 0; font-size:12px;">Failed to load changelog</div>';
   }
 }
 </script>

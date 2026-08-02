@@ -52,6 +52,7 @@
     background-color: var(--bg-0);
     background-image: radial-gradient(circle, rgba(255,255,255,0.055) 1px, transparent 1.2px);
     background-size: 44px 44px;
+    overscroll-behavior: none;
   }
   ::selection { background: rgba(255, 48, 69, 0.28); }
 
@@ -201,7 +202,7 @@
 
   /* ============ CANVAS ============ */
   #canvas-container { position: fixed; top: 0; left: var(--sidebar-w); right: 0; bottom: 0; background: var(--bg-0); }
-  #canvas-container canvas { display: block; width: 100% !important; height: 100% !important; }
+  #canvas-container canvas { display: block; width: 100% !important; height: 100% !important; touch-action: none; }
   #canvas-container::after {
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background: radial-gradient(circle at 72% 42%, transparent 0, transparent 42%, rgba(0,0,0,0.36) 100%);
@@ -456,11 +457,45 @@
   #changelog-close svg { width: 13px; height: 13px; }
   #changelog-content { overflow-y: auto; padding: 12px 16px 16px; flex: 1; }
 
-  @media (max-width: 720px) {
-    #sidebar { width: 100%; height: auto; max-height: 260px; padding: 12px; border-right: none; border-bottom: 1px solid var(--line); }
-    #canvas-container, #canvas-loading { left: 0; top: 260px; }
+  #mobile-toolbar, #mobile-sidebar-backdrop, #mobile-sidebar-close { display: none; }
+
+  @media (max-width: 720px), (pointer: coarse) {
+    #sidebar {
+      width: min(86vw, 320px); height: 100%; max-height: none; padding: 18px 16px 16px;
+      border-right: 1px solid var(--line); border-bottom: none; z-index: 31;
+      transform: translateX(-105%); transition: transform .22s ease;
+    }
+    body.mobile-sidebar-open #sidebar { transform: translateX(0); }
+    #canvas-container, #canvas-loading { left: 0; top: 0; }
     #scale-control { left: 14px; bottom: 14px; width: min(250px, calc(100vw - 28px)); }
     #motor-preview-control { left: 14px; bottom: 103px; width: min(250px, calc(100vw - 28px)); }
+    #mobile-sidebar-backdrop {
+      position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.58);
+      backdrop-filter: blur(2px);
+    }
+    body.mobile-sidebar-open #mobile-sidebar-backdrop { display: block; }
+    #mobile-sidebar-close {
+      position: absolute; display: grid; place-items: center; top: max(10px, env(safe-area-inset-top)); right: 10px;
+      width: 44px; height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-m);
+      background: var(--bg-2); color: var(--text-0); font-size: 22px; cursor: pointer;
+    }
+    #mobile-toolbar {
+      position: fixed; z-index: 20; display: flex; flex-wrap: wrap; gap: 7px;
+      top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left));
+      max-width: calc(100vw - 20px); padding: 6px; border: 1px solid var(--line-strong);
+      border-radius: 11px; background: rgba(5,5,5,.88); backdrop-filter: blur(10px);
+      box-shadow: 0 8px 28px rgba(0,0,0,.42);
+    }
+    .mobile-tool {
+      display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0 10px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); color: var(--text-1);
+      font: 600 10px/1 var(--font-mono); cursor: pointer; touch-action: manipulation;
+    }
+    .mobile-tool svg { width: 19px; height: 19px; }
+    .mobile-tool.active { color: #fff; border-color: var(--accent); background: var(--accent); }
+    .mobile-tool.danger { color: var(--err); border-color: var(--err-line); }
+    .mobile-tool:disabled { opacity: .35; cursor: default; }
+    .footer { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -471,6 +506,7 @@
 <body>
 
 <div id="sidebar">
+  <button id="mobile-sidebar-close" type="button" aria-label="Close controls">&times;</button>
   <div class="brand">
     <div class="brand-mark">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
@@ -592,6 +628,25 @@
     <span><kbd>Ctrl+Z</kbd> undo</span>
   </div>
 </div>
+
+<div id="mobile-sidebar-backdrop" aria-hidden="true"></div>
+<nav id="mobile-toolbar" aria-label="Mobile editor controls">
+  <button class="mobile-tool" id="mobile-menu" type="button" aria-label="Open all controls" title="All controls">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <button class="mobile-tool active" id="mobile-move" type="button" aria-label="Move selected parts" title="Move" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M22 12l-3-3M22 12l-3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3"/></svg>
+  </button>
+  <button class="mobile-tool" id="mobile-rotate" type="button" aria-label="Rotate selected parts" title="Rotate" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>
+  </button>
+  <button class="mobile-tool" id="mobile-undo" type="button" aria-label="Undo" title="Undo" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+  </button>
+  <button class="mobile-tool danger" id="mobile-delete" type="button" aria-label="Delete selected parts" title="Delete" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v5M14 11v5"/></svg>
+  </button>
+</nav>
 
 <div id="canvas-container"></div>
 <div id="marquee-box"></div>
@@ -1116,8 +1171,10 @@ controls.mouseButtons = {
   RIGHT: THREE.MOUSE.ROTATE
 };
 controls.touches = {
-  ONE: THREE.TOUCH.PAN,
-  TWO: THREE.TOUCH.DOLLY_PAN
+  // One finger is reserved for selection and the transform gizmo.
+  ONE: null,
+  // Two fingers orbit the camera; pinching also zooms.
+  TWO: THREE.TOUCH.DOLLY_ROTATE
 };
 
 // --- Transform Gizmo (move/rotate selected parts) ---
@@ -1563,6 +1620,20 @@ const motorPreviewControl = document.getElementById('motor-preview-control');
 const motorPreviewToggle = document.getElementById('motor-preview-toggle');
 const motorPreviewSpeed = document.getElementById('motor-preview-speed');
 const motorPreviewRpm = document.getElementById('motor-preview-rpm');
+const mobileMoveBtn = document.getElementById('mobile-move');
+const mobileRotateBtn = document.getElementById('mobile-rotate');
+const mobileUndoBtn = document.getElementById('mobile-undo');
+const mobileDeleteBtn = document.getElementById('mobile-delete');
+
+function updateMobileControls() {
+  const hasSelection = selectedMeshes.size > 0;
+  mobileMoveBtn.disabled = !hasSelection;
+  mobileRotateBtn.disabled = !hasSelection;
+  mobileDeleteBtn.disabled = !hasSelection;
+  mobileUndoBtn.disabled = undoHistory.length === 0;
+  mobileMoveBtn.classList.toggle('active', gizmoMode === 'translate');
+  mobileRotateBtn.classList.toggle('active', gizmoMode === 'rotate');
+}
 
 // Selection panel
 const selPanel = document.getElementById('sel-panel');
@@ -2198,6 +2269,7 @@ function updateSelectionUI() {
   btnCopyS2.disabled = !currentModelInfo;
   const ungroupBtn = document.getElementById('btn-ungroup');
   if (ungroupBtn) ungroupBtn.disabled = n === 0;
+  updateMobileControls();
 }
 
 // ========================================================================
@@ -2332,9 +2404,19 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let pointerDownPos = { x: 0, y: 0 };
 let isPointerDown = false;
+const activeTouchPointers = new Set();
+let touchGestureHadMultiplePointers = false;
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  console.log('pointerdown', e.button, 'gizmoDragging=', gizmoDragging); // TEMP DEBUG
+  if (e.pointerType === 'touch') {
+    activeTouchPointers.add(e.pointerId);
+    if (activeTouchPointers.size > 1) {
+      touchGestureHadMultiplePointers = true;
+      isPointerDown = false;
+      hideMarquee();
+      return;
+    }
+  }
   if (e.button !== 0) return;
   gizmoJustReleased = false;
   if (gizmoDragging) return;
@@ -2342,11 +2424,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   pointerDownPos.x = e.clientX - rect.left;
   pointerDownPos.y = e.clientY - rect.top;
   isPointerDown = true;
-  console.log('isPointerDown set to true'); // TEMP DEBUG
 });
 
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (isPointerDown) console.log('pointermove while down', e.button, e.buttons); // TEMP DEBUG
+  if (e.pointerType === 'touch' && (touchGestureHadMultiplePointers || activeTouchPointers.size > 1)) return;
   if (!isPointerDown || !(e.buttons & 1) || gizmoDragging) return;
   const rect = container.getBoundingClientRect();
   const cx = e.clientX - rect.left;
@@ -2359,6 +2440,15 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 });
 
 renderer.domElement.addEventListener('pointerup', (e) => {
+  if (e.pointerType === 'touch') {
+    activeTouchPointers.delete(e.pointerId);
+    if (touchGestureHadMultiplePointers) {
+      isPointerDown = false;
+      hideMarquee();
+      if (activeTouchPointers.size === 0) touchGestureHadMultiplePointers = false;
+      return;
+    }
+  }
   if (e.button !== 0) return;
   const wasGizmoDrag = gizmoDragging || gizmoJustReleased;
   gizmoJustReleased = false;
@@ -2425,8 +2515,14 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   }
 });
 
+renderer.domElement.addEventListener('pointercancel', (e) => {
+  activeTouchPointers.delete(e.pointerId);
+  if (activeTouchPointers.size === 0) touchGestureHadMultiplePointers = false;
+  isPointerDown = false;
+  hideMarquee();
+});
+
 function drawMarquee(x1, y1, x2, y2) {
-  console.log('drawMarquee called', x1, y1, x2, y2); // TEMP DEBUG
   const rect = container.getBoundingClientRect();
   const left = Math.min(x1, x2) + rect.left;
   const top = Math.min(y1, y2) + rect.top;
@@ -2800,6 +2896,7 @@ function updateUndoButton() {
   } else {
     undoBtn.innerHTML = 'Undo';
   }
+  updateMobileControls();
 }
 
 function performUndo() {
@@ -2877,9 +2974,7 @@ document.addEventListener('keydown', (e) => {
 
   // R toggles gizmo mode between translate and rotate (only when parts selected)
   if ((e.key === 'r' || e.key === 'R') && selectedMeshes.size > 0 && !gizmoDragging) {
-    gizmoMode = gizmoMode === 'translate' ? 'rotate' : 'translate';
-    transformControls.setMode(gizmoMode);
-    updateSelectionPanel();
+    setGizmoMode(gizmoMode === 'translate' ? 'rotate' : 'translate');
     e.preventDefault();
     return;
   }
@@ -2964,6 +3059,27 @@ window.addEventListener('blur', () => { keysDown.clear(); });
 // ========================================================================
 //  UI EVENT HANDLERS
 // ========================================================================
+
+function setGizmoMode(mode) {
+  gizmoMode = mode;
+  transformControls.setMode(gizmoMode);
+  updateSelectionPanel();
+  updateMobileControls();
+}
+
+document.getElementById('mobile-menu').addEventListener('click', () => {
+  document.body.classList.add('mobile-sidebar-open');
+});
+document.getElementById('mobile-sidebar-close').addEventListener('click', () => {
+  document.body.classList.remove('mobile-sidebar-open');
+});
+document.getElementById('mobile-sidebar-backdrop').addEventListener('click', () => {
+  document.body.classList.remove('mobile-sidebar-open');
+});
+mobileMoveBtn.addEventListener('click', () => setGizmoMode('translate'));
+mobileRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
+mobileUndoBtn.addEventListener('click', performUndo);
+mobileDeleteBtn.addEventListener('click', deleteSelected);
 
 wireBtn.addEventListener('click', () => {
   isWireframe = !isWireframe;

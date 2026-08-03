@@ -640,6 +640,9 @@
   <button class="mobile-tool" id="mobile-rotate" type="button" aria-label="Rotate selected parts" title="Rotate" disabled>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>
   </button>
+  <button class="mobile-tool" id="mobile-group" type="button" aria-label="Group selected parts" title="Group selected parts" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3.5 3.5 0 0 1 3.5 3.5v4M14 17.5h-4A3.5 3.5 0 0 1 6.5 14v-4"/></svg>
+  </button>
   <button class="mobile-tool" id="mobile-undo" type="button" aria-label="Undo" title="Undo" disabled>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
   </button>
@@ -1622,6 +1625,7 @@ const motorPreviewSpeed = document.getElementById('motor-preview-speed');
 const motorPreviewRpm = document.getElementById('motor-preview-rpm');
 const mobileMoveBtn = document.getElementById('mobile-move');
 const mobileRotateBtn = document.getElementById('mobile-rotate');
+const mobileGroupBtn = document.getElementById('mobile-group');
 const mobileUndoBtn = document.getElementById('mobile-undo');
 const mobileDeleteBtn = document.getElementById('mobile-delete');
 
@@ -1629,6 +1633,7 @@ function updateMobileControls() {
   const hasSelection = selectedMeshes.size > 0;
   mobileMoveBtn.disabled = !hasSelection;
   mobileRotateBtn.disabled = !hasSelection;
+  mobileGroupBtn.disabled = selectedMeshes.size < 2;
   mobileDeleteBtn.disabled = !hasSelection;
   mobileUndoBtn.disabled = undoHistory.length === 0;
   mobileMoveBtn.classList.toggle('active', gizmoMode === 'translate');
@@ -3078,6 +3083,7 @@ document.getElementById('mobile-sidebar-backdrop').addEventListener('click', () 
 });
 mobileMoveBtn.addEventListener('click', () => setGizmoMode('translate'));
 mobileRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
+mobileGroupBtn.addEventListener('click', groupSelectedParts);
 mobileUndoBtn.addEventListener('click', performUndo);
 mobileDeleteBtn.addEventListener('click', deleteSelected);
 

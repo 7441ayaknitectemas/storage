@@ -828,17 +828,47 @@ function parseColor(str) {
   return new THREE.Color(p[0], p[1], p[2]);
 }
 
+function isValidPositionForOrigin(pos){
+  if(!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z)) return false;
+  // Absolute bound for BABFT world - anything beyond 1e6 is placeholder/void (e.g. -3e38 in .Build)
+  if(Math.abs(pos.x) > 1e6 || Math.abs(pos.y) > 1e6 || Math.abs(pos.z) > 1e6) return false;
+  return true;
+}
 function calculateModelOrigin(parts) {
-  const origin = new THREE.Vector3();
-  let count = 0;
+  const valid = [];
   for (const part of parts || []) {
     if (part._motorFlag) continue;
     const pos = parseVec3(part.Position);
     if (!pos) continue;
-    origin.add(pos);
-    count++;
+    if (!isValidPositionForOrigin(pos)) continue;
+    valid.push(pos.clone());
   }
-  return count > 0 ? origin.multiplyScalar(1 / count) : new THREE.Vector3();
+  if(valid.length === 0){
+    // fallback: try raw without filter but still exclude insane values >1e12
+    for (const part of parts || []) {
+      if (part._motorFlag) continue;
+      const pos = parseVec3(part.Position);
+      if (!pos) continue;
+      if(!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z)) continue;
+      if(Math.abs(pos.x) > 1e12 || Math.abs(pos.y) > 1e12 || Math.abs(pos.z) > 1e12) continue;
+      valid.push(pos.clone());
+    }
+  }
+  if(valid.length === 0) return new THREE.Vector3();
+  // Median outlier filtering like computeFilteredBounds
+  const sorted = [...valid];
+  const median = new THREE.Vector3();
+  sorted.sort((a,b)=>a.x-b.x); median.x = sorted[Math.floor(sorted.length/2)].x;
+  sorted.sort((a,b)=>a.y-b.y); median.y = sorted[Math.floor(sorted.length/2)].y;
+  sorted.sort((a,b)=>a.z-b.z); median.z = sorted[Math.floor(sorted.length/2)].z;
+  const dists = valid.map(p=>p.distanceTo(median)).sort((a,b)=>a-b);
+  const p95 = dists[Math.min(Math.floor(dists.length*0.95), dists.length-1)];
+  const threshold = Math.max(p95*2.5, 100);
+  const filtered = valid.filter(p=>p.distanceTo(median) <= threshold);
+  const use = filtered.length > 0 ? filtered : valid;
+  const origin = new THREE.Vector3();
+  for(const p of use) origin.add(p);
+  return origin.multiplyScalar(1/use.length);
 }
 
 function ensureModelOrigin(info) {
@@ -1153,14 +1183,47 @@ scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
 camera.position.set(15, 12, 20);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let useInstancing = false;
+const INSTANCING_THRESHOLD = 2500; // above this -> InstancedMesh batching
+const LARGE_BUILD_SHADOW_LIMIT = 2500; // shadows off above this
+const UNIT_GEOMETRY = new THREE.BoxGeometry(1,1,1); // shared unit cube, scaled per instance
+let instancedMeshes = []; // { mesh: InstancedMesh, type, partIndices }
+const partIndexToInstance = new Map(); // partIndex -> { instMesh, localId }
+let selectionOverlayGroup = new THREE.Group();
+scene.add(selectionOverlayGroup);
+const _dummyObj = new THREE.Object3D();
+const _dummyMatrix = new THREE.Matrix4();
+const SHARED_EDGES = new THREE.EdgesGeometry(UNIT_GEOMETRY);
+const SHARED_LINE_MAT = new THREE.LineBasicMaterial({ color: 0xff3045, transparent:true, opacity:0.95, depthTest:false });
+// Threshold above which we skip per-part outlines for bulk selection to avoid O(N) LineSegments creation
+const BULK_HIGHLIGHT_LIMIT = 400;
+
+function getAdaptivePixelRatio(){
+  // Cap DPR aggressively for large builds / low-end devices
+  const base = window.devicePixelRatio || 1;
+  // currentModelInfo is declared later (TDZ) - guard with typeof check
+  let info = null;
+  try { info = typeof currentModelInfo !== 'undefined' ? currentModelInfo : null; } catch(e) { info = null; }
+  if(!info) return Math.min(base, 1.5);
+  const n = info.parts ? info.parts.length : 0;
+  if(n > 10000) return Math.min(base, 1);
+  if(n > 4000) return Math.min(base, 1.15);
+  return Math.min(base, 1.5);
+}
+let _rendererNeedsReinit = false;
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: false, depth: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.shadowMap.enabled = false; // enabled per-build in buildScene if under limit
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
+let _renderDirty = true;
+let _lastRendererSize = { w: container.clientWidth, h: container.clientHeight };
+function markRenderDirty(){ _renderDirty = true; }
+renderer.domElement.addEventListener('pointermove', markRenderDirty, {passive:true});
+renderer.domElement.addEventListener('wheel', markRenderDirty, {passive:true});
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -1168,6 +1231,7 @@ controls.dampingFactor = 0.1;
 controls.minDistance = 0.5;
 controls.maxDistance = 500;
 controls.enableKeys = false;
+controls.addEventListener('change', () => { _renderDirty = true; });
 controls.mouseButtons = {
   LEFT: null,
   MIDDLE: THREE.MOUSE.DOLLY,
@@ -1237,7 +1301,7 @@ transformControls.addEventListener('dragging-changed', (e) => {
   }
 });
 
-// Live update: apply pivot delta to every selected mesh
+// Live update: apply pivot delta to every selected mesh - batched for large selections
 transformControls.addEventListener('objectChange', () => {
   if (!gizmoPivotStart || selectedMeshes.size === 0) return;
 
@@ -1247,6 +1311,7 @@ transformControls.addEventListener('objectChange', () => {
     gizmoPivotStart.quaternion.clone().invert()
   );
 
+  const dirtyInst = new Set();
   for (const mesh of selectedMeshes) {
     const start = gizmoMeshStart.get(mesh);
     if (!start) continue;
@@ -1264,7 +1329,40 @@ if (gizmoMode === 'translate') {
       mesh.rotation.order = 'XYZ';
       mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
     }
+    // If instanced, batch sync to GPU instance matrix (no per-mesh bbox recompute)
+    if(useInstancing){
+      const idx = mesh.userData.partIndex;
+      if(idx !== undefined){
+        const info = partIndexToInstance.get(idx);
+        if(info){
+          _dummyObj.position.copy(mesh.position);
+          _dummyObj.quaternion.copy(mesh.quaternion);
+          _dummyObj.scale.copy(mesh.scale);
+          _dummyObj.updateMatrix();
+          info.instMesh.setMatrixAt(info.localId, _dummyObj.matrix);
+          dirtyInst.add(info.instMesh);
+        }
+      }
+      // Also update overlay highlight position for selected meshes
+      if(mesh.userData.selectionOutline){
+        const ol = mesh.userData.selectionOutline;
+        ol.position.copy(mesh.position);
+        ol.quaternion.copy(mesh.quaternion);
+        ol.scale.copy(mesh.scale);
+      }
+    }
   }
+  if(useInstancing && dirtyInst.size){
+    for(const im of dirtyInst){
+      im.instanceMatrix.needsUpdate = true;
+      // Don't recompute bbox every frame for >1000 parts - throttle
+      if(selectedMeshes.size < 1000){
+        im.computeBoundingBox();
+        im.computeBoundingSphere();
+      }
+    }
+  }
+  _renderDirty = true;
 });
 
 // --- Lighting ---
@@ -1375,11 +1473,23 @@ function groupSelectedParts() {
     const part = currentModelInfo.parts[idx];
     part._groupId = groupId;
     if (part._mesh) {
-      const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
-      mat.color.set(color);
+      const mat = part._mesh.material ? (Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material) : null;
+      if(mat && mat.color) mat.color.set(color);
+      if(part._mesh.userData) part._mesh.userData.baseColor = tc.clone();
+      if(useInstancing){
+        const info = partIndexToInstance.get(idx);
+        if(info){
+          // update instance color (preserve highlight if selected)
+          const isSel = selectedMeshes.has(part._mesh);
+          const c = isSel ? tc.clone().lerp(new THREE.Color(0xff3045), 0.55) : tc.clone();
+          info.instMesh.setColorAt(info.localId, c);
+          info.instMesh.instanceColor.needsUpdate = true;
+        }
+      }
     }
     // Keep original _data.Color for export — only change visual
   }
+  if(useInstancing) _renderDirty = true;
 
   renderGroupsUI();
   updateSelectionPanel();
@@ -1465,13 +1575,12 @@ function addMotorToGroup(groupId) {
 function selectGroupMembers(groupId) {
   const group = groups.find(g => g.id === groupId);
   if (!group || !currentModelInfo) return;
-  clearSelection();
+  const meshes = [];
   for (const idx of group.partIndices) {
     const part = currentModelInfo.parts[idx];
-    if (part && part._mesh && part._mesh.visible) {
-      selectMesh(part._mesh, true);
-    }
+    if (part && part._mesh && part._mesh.visible) meshes.push(part._mesh);
   }
+  selectMeshesBulk(meshes, false);
 }
 
 function ungroupSelectedParts() {
@@ -1486,17 +1595,28 @@ function ungroupSelectedParts() {
       delete part._groupId;
       const defaultColor = getDefaultColor(part._type);
       if (part._mesh) {
-        const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
-        mat.color.set(defaultColor);
-      }
-      // Restore mesh to original color from _data if available
-      const origColor = parseColor(part._data.Color);
-      if (origColor && part._mesh) {
-        const mat = Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material;
-        mat.color.copy(origColor);
+        const mat = part._mesh.material ? (Array.isArray(part._mesh.material) ? part._mesh.material[0] : part._mesh.material) : null;
+        if(mat && mat.color) mat.color.set(defaultColor);
+        // Restore mesh to original color from _data if available
+        const origColor = parseColor(part._data.Color);
+        if (origColor) {
+          if(mat && mat.color) mat.color.copy(origColor);
+          if(part._mesh.userData) part._mesh.userData.baseColor = origColor.clone();
+          if(useInstancing){
+            const info = partIndexToInstance.get(idx);
+            if(info){
+              const c = selectedMeshes.has(part._mesh) ? origColor.clone().lerp(new THREE.Color(0xff3045),0.55) : origColor;
+              info.instMesh.setColorAt(info.localId, c);
+              info.instMesh.instanceColor.needsUpdate = true;
+            }
+          }
+        } else if(part._mesh.userData){
+          part._mesh.userData.baseColor = new THREE.Color(defaultColor);
+        }
       }
     }
   }
+  if(useInstancing) _renderDirty = true;
 
   for (const gid of affectedGroupIds) {
     const group = groups.find(g => g.id === gid);
@@ -1717,10 +1837,12 @@ function applyBuildScale(percent) {
   }
 
   currentModelInfo.buildScale = nextScale;
+  if(useInstancing) updateAllInstancesFromProxies();
   updateBuildScaleControl();
   updateStatsNumbers();
   rebuildStats();
   updateSelectionPanel();
+  _renderDirty = true;
 }
 
 let scaleGestureHasSnapshot = false;
@@ -1812,6 +1934,12 @@ function stopMotorPreview() {
         if (!member.mesh) continue;
         member.mesh.position.copy(member.position);
         member.mesh.quaternion.copy(member.quaternion);
+        if(useInstancing && member.mesh.userData.partIndex !== undefined) syncProxyToInstance(member.mesh.userData.partIndex);
+        if(member.mesh.userData.selectionOutline){
+          const ol = member.mesh.userData.selectionOutline;
+          ol.position.copy(member.mesh.position);
+          ol.quaternion.copy(member.mesh.quaternion);
+        }
       }
     }
   }
@@ -1821,6 +1949,7 @@ function stopMotorPreview() {
   motorPreviewLastTime = 0;
   motorPreviewToggle.classList.remove('active');
   motorPreviewToggle.textContent = 'Preview motor spin';
+  _renderDirty = true;
 }
 
 function updateMotorPreview(timeMs) {
@@ -1837,8 +1966,17 @@ function updateMotorPreview(timeMs) {
       const offset = member.position.clone().sub(entry.pivot).applyQuaternion(rotationDelta);
       member.mesh.position.copy(entry.pivot).add(offset);
       member.mesh.quaternion.multiplyQuaternions(rotationDelta, member.quaternion);
+      if(useInstancing && member.mesh.userData.partIndex !== undefined){
+        syncProxyToInstance(member.mesh.userData.partIndex);
+        if(member.mesh.userData.selectionOutline){
+          const ol = member.mesh.userData.selectionOutline;
+          ol.position.copy(member.mesh.position);
+          ol.quaternion.copy(member.mesh.quaternion);
+        }
+      }
     }
   }
+  _renderDirty = true;
 }
 
 motorPreviewToggle.addEventListener('click', () => {
@@ -1893,6 +2031,8 @@ function clearModel() {
     disposeGroup(modelGroup);
     modelGroup = null;
   }
+  disposeInstanced();
+  useInstancing = false;
   currentModelInfo = null;
   if (centerMarker) centerMarker.visible = false;
   updateBuildScaleControl();
@@ -1913,14 +2053,77 @@ function clearModel() {
 function disposeGroup(group) {
   group.traverse(obj => {
     if (obj.isMesh) {
-      obj.geometry.dispose();
+      // UNIT_GEOMETRY is shared, don't dispose it
+      if (obj.geometry !== UNIT_GEOMETRY) obj.geometry.dispose();
       if (Array.isArray(obj.material)) {
         obj.material.forEach(m => m.dispose());
-      } else {
+      } else if(obj.material) {
         obj.material.dispose();
       }
     }
   });
+}
+function disposeInstanced() {
+  for (const g of instancedMeshes) {
+    scene.remove(g.mesh);
+    if (g.mesh.geometry !== UNIT_GEOMETRY) g.mesh.geometry.dispose();
+    g.mesh.material.dispose();
+    if (g.mesh.geometry) g.mesh.geometry.dispose = () => {}; // guard double dispose of shared
+  }
+  instancedMeshes.length = 0;
+  partIndexToInstance.clear();
+  // clear overlay selection highlights
+  while(selectionOverlayGroup.children.length){
+    const c = selectionOverlayGroup.children[0];
+    selectionOverlayGroup.remove(c);
+    if(c.geometry) c.geometry.dispose();
+    if(c.material) c.material.dispose();
+  }
+}
+function syncProxyToInstance(partIndex){
+  const info = partIndexToInstance.get(partIndex);
+  if(!info || !currentModelInfo) return;
+  const part = currentModelInfo.parts[partIndex];
+  const mesh = part?._mesh;
+  if(!mesh || !info.instMesh) return;
+  // mesh is proxy Object3D, its position/rotation/scale already updated
+  // compose matrix from proxy
+  _dummyObj.position.copy(mesh.position);
+  _dummyObj.quaternion.copy(mesh.quaternion);
+  _dummyObj.scale.copy(mesh.scale);
+  _dummyObj.updateMatrix();
+  info.instMesh.setMatrixAt(info.localId, _dummyObj.matrix);
+  info.instMesh.instanceMatrix.needsUpdate = true;
+  if(info.instMesh.instanceColor){
+    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    // color already on proxy material? sync instanceColor
+    if(mat && mat.color){
+      info.instMesh.setColorAt(info.localId, mat.color);
+      info.instMesh.instanceColor.needsUpdate = true;
+    }
+  }
+  // update bounds for frustum culling
+  info.instMesh.computeBoundingBox();
+  if(info.instMesh.geometry) info.instMesh.computeBoundingSphere();
+  _renderDirty = true;
+}
+function updateAllInstancesFromProxies(){
+  for(const [idx, info] of partIndexToInstance.entries()){
+    const part = currentModelInfo.parts[idx];
+    const mesh = part?._mesh;
+    if(!mesh) continue;
+    _dummyObj.position.copy(mesh.position);
+    _dummyObj.quaternion.copy(mesh.quaternion);
+    _dummyObj.scale.copy(mesh.scale);
+    _dummyObj.updateMatrix();
+    info.instMesh.setMatrixAt(info.localId, _dummyObj.matrix);
+  }
+  for(const g of instancedMeshes){
+    g.mesh.instanceMatrix.needsUpdate = true;
+    g.mesh.computeBoundingBox();
+    g.mesh.computeBoundingSphere();
+  }
+  _renderDirty = true;
 }
 
 function createCenterMarker() {
@@ -2037,75 +2240,31 @@ function computeFilteredBounds(parts) {
 }
 
 function buildScene(parts) {
+  // Decide rendering path
+  const shouldInstance = parts.length > INSTANCING_THRESHOLD;
+  useInstancing = shouldInstance;
+
+  // --- performance gating ---
+  const shadowsOn = parts.length <= LARGE_BUILD_SHADOW_LIMIT;
+  renderer.shadowMap.enabled = shadowsOn;
+  dir.castShadow = shadowsOn;
+  // Adaptive pixel ratio
+  renderer.setPixelRatio(getAdaptivePixelRatio());
+
+  // Cleanup previous scene
   if (modelGroup) {
     scene.remove(modelGroup);
     disposeGroup(modelGroup);
+    modelGroup = null;
+  }
+  disposeInstanced();
+
+  if (shouldInstance) {
+    buildInstancedScene(parts);
+  } else {
+    buildBatchedMeshScene(parts);
   }
 
-  modelGroup = new THREE.Group();
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    const pos = parseVec3(part.Position);
-    const size = parseVec3(part.Size);
-    if (!pos) continue;
-
-    const s = size || new THREE.Vector3(0.5, 0.5, 0.5);
-    const geom = new THREE.BoxGeometry(s.x, s.y, s.z);
-
-    const color = parseColor(part.Color) || getDefaultColor(part._type);
-    const origOpacity = getPartBaseOpacity(part);
-    const opacity = showTransparent ? 1 : origOpacity;
-    const transparent = showTransparent ? false : opacity < 0.999;
-
-    const mat = new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.5,
-      metalness: 0.1,
-      transparent,
-      opacity,
-      depthWrite: !transparent,
-    });
-
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.copy(pos);
-
-    const rot = parseVec3(part.Rotation);
-    if (rot) {
-      mesh.rotation.order = 'XYZ';
-      mesh.rotation.set(
-        rot.x * Math.PI / 180,
-        rot.y * Math.PI / 180,
-        rot.z * Math.PI / 180
-      );
-    }
-    // Prefer stored quaternion for exact rotation preservation
-    if (part._quaternion) {
-      mesh.quaternion.fromArray(part._quaternion);
-      mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
-    }
-
-    if (part.ShowShadow !== undefined) {
-      mesh.castShadow = !!part.ShowShadow;
-      mesh.receiveShadow = !!part.ShowShadow;
-    } else {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    }
-
-    if (isWireframe) mat.wireframe = true;
-
-    if (hiddenTypes.has(part._type)) {
-      mesh.visible = false;
-    }
-
-    mesh.userData.partIndex = i;
-    part._mesh = mesh;
-
-    modelGroup.add(mesh);
-  }
-
-  scene.add(modelGroup);
   updateCenterMarker();
   updateBuildScaleControl();
 
@@ -2123,6 +2282,131 @@ function buildScene(parts) {
     camera.lookAt(center);
     controls.update();
   }
+  _renderDirty = true;
+}
+
+function buildBatchedMeshScene(parts){
+  modelGroup = new THREE.Group();
+  const shadowsOn = parts.length <= LARGE_BUILD_SHADOW_LIMIT;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const pos = parseVec3(part.Position);
+    const size = parseVec3(part.Size);
+    if (!pos) continue;
+    const s = size || new THREE.Vector3(0.5, 0.5, 0.5);
+    const color = parseColor(part.Color) || new THREE.Color(getDefaultColor(part._type));
+    const origOpacity = getPartBaseOpacity(part);
+    const opacity = showTransparent ? 1 : origOpacity;
+    const transparent = showTransparent ? false : opacity < 0.999;
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.5,
+      metalness: 0.1,
+      transparent,
+      opacity,
+      depthWrite: !transparent,
+    });
+    // Use shared unit geometry scaled via mesh.scale (avoids per-part geometry allocation)
+    const mesh = new THREE.Mesh(UNIT_GEOMETRY, mat);
+    mesh.scale.copy(s);
+    mesh.position.copy(pos);
+    const rot = parseVec3(part.Rotation);
+    if (rot) {
+      mesh.rotation.order = 'XYZ';
+      mesh.rotation.set(rot.x * Math.PI / 180, rot.y * Math.PI / 180, rot.z * Math.PI / 180);
+    }
+    if (part._quaternion) {
+      mesh.quaternion.fromArray(part._quaternion);
+      mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
+    }
+    mesh.castShadow = shadowsOn ? (part.ShowShadow !== undefined ? !!part.ShowShadow : true) : false;
+    mesh.receiveShadow = shadowsOn ? (part.ShowShadow !== undefined ? !!part.ShowShadow : true) : false;
+    if (isWireframe) mat.wireframe = true;
+    if (hiddenTypes.has(part._type)) mesh.visible = false;
+    mesh.frustumCulled = true;
+    mesh.userData.partIndex = i;
+    part._mesh = mesh;
+    modelGroup.add(mesh);
+  }
+  scene.add(modelGroup);
+}
+
+function buildInstancedScene(parts){
+  // Group by type so visibility toggles = hide whole InstancedMesh
+  const groupsByType = {};
+  for(let i=0;i<parts.length;i++){
+    const t = parts[i]._type || 'Unknown';
+    if(!groupsByType[t]) groupsByType[t] = [];
+    groupsByType[t].push(i);
+  }
+  const shadowsOn = false; // instanced path never casts shadows (huge perf win)
+  for(const [type, indices] of Object.entries(groupsByType)){
+    const count = indices.length;
+    const hidden = hiddenTypes.has(type);
+    const rough = getTypeRoughness(type);
+    const metal = getTypeMetalness(type);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: rough,
+      metalness: metal,
+      transparent: showTransparent ? false : false, // opacity handled per-material not per-instance (instanced opacity not supported) - treat transparent parts as opaque when instanced for perf
+      wireframe: isWireframe,
+    });
+    // Note: per-instance transparency not supported in this fast path; glass parts will render opaque when instanced (>2.5k). That's intentional perf tradeoff.
+    const instMesh = new THREE.InstancedMesh(UNIT_GEOMETRY, mat, count);
+    instMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if(instMesh.instanceColor) instMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    instMesh.count = count;
+    instMesh.frustumCulled = false; // whole batch culled as one - keep visible even if outliers
+    instMesh.castShadow = false;
+    instMesh.receiveShadow = false;
+    instMesh.visible = !hidden;
+    instMesh.userData.type = type;
+    instMesh.userData.partIndices = indices.slice();
+
+    for(let localId=0; localId<count; localId++){
+      const partIndex = indices[localId];
+      const part = parts[partIndex];
+      const pos = parseVec3(part.Position) || new THREE.Vector3();
+      const size = parseVec3(part.Size) || new THREE.Vector3(0.5,0.5,0.5);
+      _dummyObj.position.copy(pos);
+      _dummyObj.scale.copy(size);
+      _dummyObj.rotation.order='XYZ';
+      const rot = parseVec3(part.Rotation);
+      if(rot) _dummyObj.rotation.set(rot.x*Math.PI/180, rot.y*Math.PI/180, rot.z*Math.PI/180);
+      if(part._quaternion){ _dummyObj.quaternion.fromArray(part._quaternion); _dummyObj.rotation.setFromQuaternion(_dummyObj.quaternion,'XYZ'); }
+      else _dummyObj.quaternion.setFromEuler(_dummyObj.rotation);
+      _dummyObj.updateMatrix();
+      instMesh.setMatrixAt(localId, _dummyObj.matrix);
+      const col = parseColor(part.Color) || new THREE.Color(getDefaultColor(type));
+      instMesh.setColorAt(localId, col);
+      // proxy object for selection/gizmo (not rendered, just holds transform)
+      const proxy = new THREE.Object3D();
+      proxy.position.copy(_dummyObj.position);
+      proxy.quaternion.copy(_dummyObj.quaternion);
+      proxy.scale.copy(_dummyObj.scale);
+      proxy.rotation.copy(_dummyObj.rotation);
+      proxy.userData.partIndex = partIndex;
+      proxy.userData.instMesh = instMesh;
+      proxy.userData.localId = localId;
+      proxy.visible = !hidden;
+      // give proxy a dummy material for color picker sync
+      proxy.material = { color: col.clone(), roughness: rough, metalness: metal };
+      // store original color for highlight restore
+      proxy.userData.baseColor = col.clone();
+      part._mesh = proxy;
+      partIndexToInstance.set(partIndex, {instMesh, localId});
+    }
+    instMesh.instanceMatrix.needsUpdate = true;
+    if(instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+    instMesh.computeBoundingBox();
+    instMesh.computeBoundingSphere();
+    scene.add(instMesh);
+    instancedMeshes.push({mesh: instMesh, type, partIndices: indices});
+  }
+  // Empty group for compatibility (center marker uses modelGroup check)
+  modelGroup = new THREE.Group();
+  scene.add(modelGroup);
 }
 
 // ========================================================================
@@ -2154,6 +2438,49 @@ function selectMesh(mesh, additive) {
   updateSelectionUI();
   updateSelectionPanel();
   updateGizmo();
+}
+
+// Bulk selection for marquee / selectAll - avoids O(N^2) UI updates and per-mesh geometry creation
+function selectMeshesBulk(meshes, additive){
+  if(!meshes || meshes.length===0) return;
+  const skipOutline = meshes.length > BULK_HIGHLIGHT_LIMIT;
+  if(!additive){
+    // fast clear without per-mesh UI thrash
+    for(const m of selectedMeshes) highlightMesh(m, false);
+    selectedMeshes.clear();
+  }
+  // Expand groups in bulk (collect all group members first)
+  const toAdd = new Set();
+  for(const m of meshes){
+    if(!m || selectedMeshes.has(m)) continue;
+    toAdd.add(m);
+    if(currentModelInfo){
+      const idx = m.userData.partIndex;
+      const gid = currentModelInfo.parts[idx]?._groupId;
+      if(gid){
+        for(const p of currentModelInfo.parts){
+          if(p._groupId===gid && p._mesh && p._mesh.visible && !selectedMeshes.has(p._mesh) && !toAdd.has(p._mesh)){
+            toAdd.add(p._mesh);
+          }
+        }
+      }
+    }
+  }
+  // Batch highlight
+  for(const m of toAdd){
+    selectedMeshes.add(m);
+    highlightMesh(m, true, {skipOutline});
+  }
+  // For instanced, batch instanceColor needsUpdate already set per highlight, but also need to ensure needsUpdate flagged once per mesh type
+  if(useInstancing){
+    for(const g of instancedMeshes){
+      if(g.mesh.instanceColor) g.mesh.instanceColor.needsUpdate = true;
+    }
+  }
+  updateSelectionUI();
+  updateSelectionPanel();
+  updateGizmo();
+  _renderDirty = true;
 }
 
 function deselectMesh(mesh) {
@@ -2230,27 +2557,62 @@ function syncSelectedPartData() {
   }
 }
 
-function highlightMesh(mesh, on) {
-  if (!mesh || !mesh.material) return;
-
-  // Remove existing outline
+function highlightMesh(mesh, on, opts = {}) {
+  const skipOutline = !!opts.skipOutline;
+  if (!mesh) return;
+  // Remove existing outline/overlay
   const oldLine = mesh.userData.selectionOutline;
   if (oldLine) {
-    oldLine.parent.remove(oldLine);
-    oldLine.geometry.dispose();
-    oldLine.material.dispose();
+    if(oldLine.parent) oldLine.parent.remove(oldLine);
+    // don't dispose shared geometry; dispose only if not shared
+    if(oldLine.geometry && oldLine.geometry !== SHARED_EDGES) oldLine.geometry.dispose();
+    if(oldLine.material && oldLine.material !== SHARED_LINE_MAT) oldLine.material.dispose();
     delete mesh.userData.selectionOutline;
   }
-
-  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  // Restore base color for instanced
+  if(useInstancing && mesh.userData.baseColor){
+    const info = partIndexToInstance.get(mesh.userData.partIndex);
+    if(info && info.instMesh){
+      if(!on){
+        info.instMesh.setColorAt(info.localId, mesh.userData.baseColor);
+        info.instMesh.instanceColor.needsUpdate = true;
+      }
+    }
+  }
+  const mat = mesh.material ? (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) : null;
 
   if (on) {
-    // Strong emissive glow
+    if(useInstancing){
+      // Tinted color in instanceColor + outline overlay in separate group
+      if(mesh.userData.baseColor){
+        const hl = mesh.userData.baseColor.clone().lerp(new THREE.Color(0xff3045), 0.55);
+        const info = partIndexToInstance.get(mesh.userData.partIndex);
+        if(info){
+          info.instMesh.setColorAt(info.localId, hl);
+          info.instMesh.instanceColor.needsUpdate = true;
+        }
+      }
+      if(skipOutline) { _renderDirty = true; return; }
+      // Edge overlay using shared edges - clone material per instance but reuse geometry
+      const lineMat = SHARED_LINE_MAT.clone();
+      const line = new THREE.LineSegments(SHARED_EDGES, lineMat);
+      line.position.copy(mesh.position);
+      line.quaternion.copy(mesh.quaternion);
+      line.scale.copy(mesh.scale);
+      line.renderOrder = 999;
+      selectionOverlayGroup.add(line);
+      mesh.userData.selectionOutline = line;
+      _renderDirty = true;
+      return;
+    }
+    if(!mat) return;
+    // Strong emissive glow (batched mesh path)
     mat.emissive = mat.color.clone();
     mat.emissiveIntensity = 0.6;
-
-    // Edge outline lines (cyan)
-    const edges = new THREE.EdgesGeometry(mesh.geometry);
+    if(skipOutline) { _renderDirty = true; return; }
+    // Edge outline lines (use UNIT_GEOMETRY edges scaled)
+    const geomForEdges = mesh.geometry === UNIT_GEOMETRY ? UNIT_GEOMETRY : mesh.geometry;
+    const edges = geomForEdges === UNIT_GEOMETRY ? SHARED_EDGES : new THREE.EdgesGeometry(geomForEdges);
     const lineMat = new THREE.LineBasicMaterial({
       color: 0xff3045,
       transparent: true,
@@ -2260,9 +2622,12 @@ function highlightMesh(mesh, on) {
     mesh.add(line);
     mesh.userData.selectionOutline = line;
   } else {
-    mat.emissive = new THREE.Color(0x000000);
-    mat.emissiveIntensity = 0;
+    if(mat){
+      mat.emissive = new THREE.Color(0x000000);
+      mat.emissiveIntensity = 0;
+    }
   }
+  _renderDirty = true;
 }
 
 function updateSelectionUI() {
@@ -2320,9 +2685,14 @@ function updateSelectionPanel() {
   }
   selExpBlocks.textContent = totalExpanded.toLocaleString();
 
-  // Color
-  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  const hex = threeColorToHex(mat.color);
+  // Color - works for both instanced proxy and batched mesh
+  let hex = '#ffffff';
+  if(mesh.material && mesh.material.color){
+    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    hex = threeColorToHex(mat.color);
+  } else if(mesh.userData.baseColor){
+    hex = threeColorToHex(mesh.userData.baseColor);
+  }
   selColorPicker.value = hex;
   selColorHex.textContent = hex;
 
@@ -2337,13 +2707,32 @@ selColorPicker.addEventListener('input', () => {
   const color = hexToThreeColor(selColorPicker.value);
   selColorHex.textContent = selColorPicker.value;
   for (const mesh of selectedMeshes) {
-    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    mat.color.copy(color);
-    // Update emissive glow to match
-    if (mesh.userData.selectionOutline) {
-      mat.emissive.copy(color);
+    // update proxy material color
+    if(mesh.material && mesh.material.color){
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      mat.color.copy(color);
+      if (mesh.userData.selectionOutline && mat.emissive) mat.emissive.copy(color);
+    }
+    if(mesh.userData.baseColor) mesh.userData.baseColor.copy(color);
+    // sync to instanced GPU buffer
+    if(useInstancing){
+      const idx = mesh.userData.partIndex;
+      if(idx !== undefined){
+        const info = partIndexToInstance.get(idx);
+        if(info){
+          // if selected, keep highlight tint? update base then re-apply highlight
+          if(selectedMeshes.has(mesh)){
+            const hl = color.clone().lerp(new THREE.Color(0xff3045), 0.55);
+            info.instMesh.setColorAt(info.localId, hl);
+          } else {
+            info.instMesh.setColorAt(info.localId, color);
+          }
+          info.instMesh.instanceColor.needsUpdate = true;
+        }
+      }
     }
   }
+  _renderDirty = true;
 });
 
 selMatPreset.addEventListener('change', () => {
@@ -2444,6 +2833,65 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   }
 });
 
+function getClickHits(px, py){
+  pointer.x = (px / container.clientWidth) * 2 - 1;
+  pointer.y = -(py / container.clientHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  if(useInstancing && currentModelInfo){
+    let best = null; let bestDist = Infinity;
+    for(const g of instancedMeshes){
+      if(!g.mesh.visible) continue;
+      const hits = raycaster.intersectObject(g.mesh);
+      for(const h of hits){
+        if(h.instanceId === undefined) continue;
+        const partIdx = g.partIndices[h.instanceId];
+        if(hiddenTypes.has(currentModelInfo.parts[partIdx]._type)) continue;
+        if(h.distance < bestDist){
+          bestDist = h.distance;
+          best = { object: currentModelInfo.parts[partIdx]._mesh, distance: h.distance };
+        }
+      }
+    }
+    return best ? [best] : [];
+  } else {
+    const meshes = [];
+    modelGroup && modelGroup.traverse(child => { if (child.isMesh) meshes.push(child); });
+    // throttle: if >8000 meshes, lower raycaster precision
+    const hits = raycaster.intersectObjects(meshes, false);
+    return hits;
+  }
+}
+function getMarqueeHits(left, top, right, bottom){
+  const tempV = new THREE.Vector3();
+  const added = [];
+  if(useInstancing && currentModelInfo){
+    for(const part of currentModelInfo.parts){
+      const mesh = part._mesh;
+      if(!mesh || !mesh.visible) continue;
+      if(hiddenTypes.has(part._type)) continue;
+      tempV.copy(mesh.position);
+      tempV.project(camera);
+      // frustum check: behind camera = skip
+      if(tempV.z > 1) continue;
+      const sx = (tempV.x * 0.5 + 0.5) * container.clientWidth;
+      const sy = (-tempV.y * 0.5 + 0.5) * container.clientHeight;
+      if (sx >= left && sx <= right && sy >= top && sy <= bottom) added.push(mesh);
+    }
+  } else {
+    const meshes = [];
+    modelGroup && modelGroup.traverse(child => { if (child.isMesh) meshes.push(child); });
+    for (const mesh of meshes) {
+      tempV.copy(mesh.position);
+      tempV.project(camera);
+      if(tempV.z > 1) continue;
+      const sx = (tempV.x * 0.5 + 0.5) * container.clientWidth;
+      const sy = (-tempV.y * 0.5 + 0.5) * container.clientHeight;
+      if (sx >= left && sx <= right && sy >= top && sy <= bottom) added.push(mesh);
+    }
+  }
+  return added;
+}
+
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') {
     activeTouchPointers.delete(e.pointerId);
@@ -2469,16 +2917,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 
   if (dist < CLICK_THRESHOLD_PX) {
     // --- Click ---
-    pointer.x = (upX / container.clientWidth) * 2 - 1;
-    pointer.y = -(upY / container.clientHeight) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-
-    const meshes = [];
-    modelGroup && modelGroup.traverse(child => {
-      if (child.isMesh) meshes.push(child);
-    });
-    const hits = raycaster.intersectObjects(meshes);
-
+    const hits = getClickHits(upX, upY);
     if (hits.length > 0) {
       const hitMesh = hits[0].object;
       if (e.shiftKey || e.ctrlKey) {
@@ -2496,28 +2935,19 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     const top = Math.min(pointerDownPos.y, upY);
     const right = Math.max(pointerDownPos.x, upX);
     const bottom = Math.max(pointerDownPos.y, upY);
-
-    const meshes = [];
-    modelGroup && modelGroup.traverse(child => {
-      if (child.isMesh) meshes.push(child);
-    });
-
-    const tempV = new THREE.Vector3();
-    const added = [];
-
-    for (const mesh of meshes) {
-      tempV.copy(mesh.position);
-      tempV.project(camera);
-      const sx = (tempV.x * 0.5 + 0.5) * container.clientWidth;
-      const sy = (-tempV.y * 0.5 + 0.5) * container.clientHeight;
-      if (sx >= left && sx <= right && sy >= top && sy <= bottom) {
-        added.push(mesh);
-      }
+    const added = getMarqueeHits(left, top, right, bottom);
+    if(added.length > 800){
+      // Very large selection - warn and batch
+      console.log('Marquee bulk select', added.length);
     }
-
-    if (!e.shiftKey && !e.ctrlKey) clearSelection();
-    for (const m of added) selectMesh(m, true);
+    if (!e.shiftKey && !e.ctrlKey) {
+      // bulk path already clears if additive false
+      selectMeshesBulk(added, false);
+    } else {
+      selectMeshesBulk(added, true);
+    }
   }
+  _renderDirty = true;
 });
 
 renderer.domElement.addEventListener('pointercancel', (e) => {
@@ -2572,15 +3002,18 @@ function deleteSelected() {
   for (const mesh of toRemove) {
     const idx = parts.findIndex(p => p._mesh === mesh);
     if (idx !== -1) indices.push(idx);
-    if (mesh.parent) mesh.parent.remove(mesh);
-    mesh.geometry.dispose();
-    if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
-    else mesh.material.dispose();
-
+    // Dispose only for batched mesh path; instanced proxies have no GPU geometry
+    if(!useInstancing){
+      if (mesh.parent) mesh.parent.remove(mesh);
+      if(mesh.geometry && mesh.geometry !== UNIT_GEOMETRY) mesh.geometry.dispose();
+      if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
+      else if(mesh.material) mesh.material.dispose();
+    }
     const oldLine = mesh.userData.selectionOutline;
     if (oldLine) {
-      oldLine.geometry.dispose();
-      oldLine.material.dispose();
+      if(oldLine.parent) oldLine.parent.remove(oldLine);
+      if(oldLine.geometry) oldLine.geometry.dispose();
+      if(oldLine.material) oldLine.material.dispose();
     }
   }
 
@@ -2721,24 +3154,45 @@ function toggleTypeVisibility(type) {
     hiddenTypes.add(type);
   }
 
-  // Apply to meshes
-  for (const p of currentModelInfo.parts) {
-    if (p._type === type && p._mesh) {
-      p._mesh.visible = !hiddenTypes.has(type);
+  const hidden = hiddenTypes.has(type);
+  // Apply to meshes / instanced
+  if(useInstancing){
+    for(const g of instancedMeshes){
+      if(g.type === type){
+        g.mesh.visible = !hidden;
+        // also hide proxies for picking
+        for(const idx of g.partIndices){
+          const m = currentModelInfo.parts[idx]?._mesh;
+          if(m) m.visible = !hidden;
+        }
+      }
+    }
+    // deselect hidden parts if any were selected
+    for(const m of [...selectedMeshes]){
+      const idx = m.userData.partIndex;
+      if(idx !== undefined && currentModelInfo.parts[idx]._type === type && hidden){
+        deselectMesh(m);
+      }
+    }
+  } else {
+    for (const p of currentModelInfo.parts) {
+      if (p._type === type && p._mesh) {
+        p._mesh.visible = !hidden;
+      }
     }
   }
 
   rebuildVisibility();
   rebuildStats();
+  _renderDirty = true;
 }
 
 function selectAllOfType(type) {
-  clearSelection();
+  const meshes = [];
   for (const p of currentModelInfo.parts) {
-    if (p._type === type && p._mesh && p._mesh.visible) {
-      selectMesh(p._mesh, true);
-    }
+    if (p._type === type && p._mesh && p._mesh.visible) meshes.push(p._mesh);
   }
+  selectMeshesBulk(meshes, false);
 }
 
 function rebuildStats() {
@@ -3021,6 +3475,7 @@ document.addEventListener('keydown', (e) => {
         break;
     }
 
+    const dirtyArrowInst = new Set();
     for (const mesh of selectedMeshes) {
       if (dx || dy || dz) mesh.position.x += dx, mesh.position.y += dy, mesh.position.z += dz;
       if (rx || ry || rz) {
@@ -3030,6 +3485,28 @@ document.addEventListener('keydown', (e) => {
         mesh.quaternion.premultiply(qDelta);
         mesh.rotation.setFromQuaternion(mesh.quaternion, 'XYZ');
       }
+      if(useInstancing){
+        const idx = mesh.userData.partIndex;
+        if(idx !== undefined){
+          const info = partIndexToInstance.get(idx);
+          if(info){
+            _dummyObj.position.copy(mesh.position);
+            _dummyObj.quaternion.copy(mesh.quaternion);
+            _dummyObj.scale.copy(mesh.scale);
+            _dummyObj.updateMatrix();
+            info.instMesh.setMatrixAt(info.localId, _dummyObj.matrix);
+            dirtyArrowInst.add(info.instMesh);
+          }
+        }
+        if(mesh.userData.selectionOutline){
+          const ol = mesh.userData.selectionOutline;
+          ol.position.copy(mesh.position);
+          ol.quaternion.copy(mesh.quaternion);
+        }
+      }
+    }
+    if(useInstancing && dirtyArrowInst.size){
+      for(const im of dirtyArrowInst){ im.instanceMatrix.needsUpdate = true; if(selectedMeshes.size < 1000){ im.computeBoundingBox(); im.computeBoundingSphere(); } }
     }
 
     // Sync part data
@@ -3048,6 +3525,7 @@ document.addEventListener('keydown', (e) => {
         }
       }
     }
+    _renderDirty = true;
   }
 });
 
@@ -3091,7 +3569,9 @@ wireBtn.addEventListener('click', () => {
   isWireframe = !isWireframe;
   wireBtn.textContent = 'Wireframe';
   wireBtn.classList.toggle('active', isWireframe);
-  if (modelGroup) {
+  if (useInstancing) {
+    for(const g of instancedMeshes){ g.mesh.material.wireframe = isWireframe; g.mesh.material.needsUpdate = true; }
+  } else if (modelGroup) {
     modelGroup.traverse(obj => {
       if (obj.isMesh && obj.material) {
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -3099,13 +3579,26 @@ wireBtn.addEventListener('click', () => {
       }
     });
   }
+  _renderDirty = true;
 });
 
 transparentBtn.addEventListener('click', () => {
   showTransparent = !showTransparent;
   transparentBtn.textContent = showTransparent ? 'Hide Transparent' : 'Show Transparent';
   transparentBtn.classList.toggle('active', showTransparent);
-  if (modelGroup && currentModelInfo) {
+  if (useInstancing) {
+    // Cheap approximation: toggle opacity on all instanced materials (no per-instance transparency in fast path)
+    for(const g of instancedMeshes){
+      const mat = g.mesh.material;
+      if(showTransparent){
+        mat.transparent = false; mat.opacity = 1;
+      } else {
+        // leave opaque; actual per-part transparency skipped for perf when instanced
+        mat.transparent = false; mat.opacity = 1;
+      }
+      mat.needsUpdate = true;
+    }
+  } else if (modelGroup && currentModelInfo) {
     for (const p of currentModelInfo.parts) {
       if (!p._mesh || !p._mesh.material) continue;
       const mat = Array.isArray(p._mesh.material) ? p._mesh.material[0] : p._mesh.material;
@@ -3122,6 +3615,7 @@ transparentBtn.addEventListener('click', () => {
       mat.needsUpdate = true;
     }
   }
+  _renderDirty = true;
 });
 
 btnDelete.addEventListener('click', deleteSelected);
@@ -3147,6 +3641,8 @@ function onResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
+  renderer.setPixelRatio(getAdaptivePixelRatio());
+  _renderDirty = true;
 }
 
 window.addEventListener('resize', onResize);
@@ -3154,16 +3650,40 @@ const resizeObserver = new ResizeObserver(() => onResize());
 resizeObserver.observe(container);
 
 // ========================================================================
-//  ANIMATION LOOP
+//  ANIMATION LOOP (on-demand + throttled for large builds)
 // ========================================================================
 
-function animate() {
+let _animTime = 0;
+function animate(time) {
   requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
+  const needsControlsUpdate = controls.enableDamping;
+  let didUpdate = false;
+  if (needsControlsUpdate) {
+    const prevPos = camera.position.clone();
+    const prevTarget = controls.target.clone();
+    controls.update();
+    // only mark dirty if camera actually moved (damping)
+    if(!prevPos.equals(camera.position) || !prevTarget.equals(controls.target)) didUpdate = true;
+  }
+  if (motorPreviewActive) {
+    updateMotorPreview(time);
+    _renderDirty = true;
+  }
+  // For large builds throttle to ~30fps when idle to save battery/GPU
+  const isLarge = currentModelInfo && currentModelInfo.parts.length > 8000;
+  if(isLarge && !_renderDirty && !motorPreviewActive && !didUpdate && !gizmoDragging){
+    // skip frame if nothing changed
+    return;
+  }
+  if(_renderDirty || didUpdate || motorPreviewActive || gizmoDragging){
+    renderer.render(scene, camera);
+    _renderDirty = false;
+  }
 }
 
-animate();
+animate(0);
+// Ensure initial frame renders
+_renderDirty = true;
 
 
 renderRecentBuilds();

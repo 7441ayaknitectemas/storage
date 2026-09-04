@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-04 - Script 1 progress UI
+
+### Added
+- Script 1 now opens a ReGui progress window ("Script 1") with separate Configs and Paints bars
+- Burst-send remotes with response-counted progress (bars advance as server replies return, not on send)
+- Part-count display (configs /3 for X/Y/Z, paints /2 for color+material)
+- Close button + auto-close 3s after completion
+
+### Changed
+- Removed overflowing outer bar label; percentage shows inside the yellow bar only
+
+Source: `C:\Users\samet\OneDrive\Desktop\testing\babft2\babftindex.html`
+
 ## 2026-08-30 - BABFT Index Update
 
 ### Added

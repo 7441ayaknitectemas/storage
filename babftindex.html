@@ -3951,6 +3951,48 @@ if not paintRemote then
     return
 end
 
+local ReGui = loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/ReGui.lua'))()
+local win = ReGui:Window({Title = "Script 1", Size = UDim2.fromOffset(400, 270), NoScroll = true}):Center()
+local title = win:Label({Text = "Getting ready..."})
+local cfgText = win:Label({Text = "Configs: 0/0"})
+local cfgBar = win:ProgressBar({Label = "", Value = 0})
+local paintText = win:Label({Text = "Paints: 0/0"})
+local paintBar = win:ProgressBar({Label = "", Value = 0})
+local status = win:Label({Text = "Idle"})
+local closeBtn = win:Button({Text = "Close", Callback = function() win:Close() end})
+local cfgTotal, cfgDone, cfgFail = 0, 0, 0
+local paintTotal, paintDone, paintFail = 0, 0, 0
+local function refreshCfg()
+    local a = math.floor(cfgDone / 3)
+    local b = math.floor(cfgTotal / 3)
+    local p = cfgTotal > 0 and math.floor(cfgDone / cfgTotal * 100) or 0
+    pcall(function()
+        cfgText.Text = ("Configs: %d/%d parts (%d failed)"):format(a, b, cfgFail)
+        cfgBar:SetPercentage(p)
+        cfgBar:SetLabel("")
+    end)
+end
+local function refreshPaint()
+    local a = math.floor(paintDone / 2)
+    local b = math.floor(paintTotal / 2)
+    local p = paintTotal > 0 and math.floor(paintDone / paintTotal * 100) or 0
+    pcall(function()
+        paintText.Text = ("Paints: %d/%d parts (%d failed)"):format(a, b, paintFail)
+        paintBar:SetPercentage(p)
+        paintBar:SetLabel("")
+    end)
+end
+local function gotCfg(ok)
+    cfgDone = cfgDone + 1
+    if not ok then cfgFail = cfgFail + 1 end
+    refreshCfg()
+end
+local function gotPaint(ok)
+    paintDone = paintDone + 1
+    if not ok then paintFail = paintFail + 1 end
+    refreshPaint()
+end
+
 local MATERIAL_MAP = {
     GlassBlock = "g",
     MetalBlock = "m",
@@ -3989,7 +4031,6 @@ if type(source) == "table" then
     end
 end
 
--- Sort strictly by original index
 table.sort(blocks, function(a, b)
     return (a._idx or 0) < (b._idx or 0)
 end)
@@ -4092,15 +4133,32 @@ end
 
 local count = math.min(#expandedBlocks, #smallParts)
 print("Configuring", count, "parts...")
-
+cfgTotal = count * 3
+paintTotal = 0
+for i = 1, count do
+    local b = expandedBlocks[i]
+    if type(b) == "table" then
+        if b.Color then paintTotal = paintTotal + 1 end
+        if getMatCode(b._blockType, b.Transparency) then paintTotal = paintTotal + 1 end
+    end
+end
+cfgDone, cfgFail, paintDone, paintFail = 0, 0, 0, 0
+refreshCfg()
+refreshPaint()
+title.Text = ("Doing %d parts..."):format(count)
+status.Text = "Sending stuff..."
 for i = 1, count do
     local block = expandedBlocks[i]
-    if type(block) ~= "table" or not block.Size then continue end
+    if type(block) ~= "table" or not block.Size then gotCfg(true) gotCfg(true) gotCfg(true) continue end
     local size = parseVec3(block.Size)
     local cfg = smallParts[i]:WaitForChild("Configuration")
-    UpdateValue:FireServer(toGrid(size.X), cfg:WaitForChild("Size X"))
-    UpdateValue:FireServer(toGrid(size.Y), cfg:WaitForChild("Size Y"))
-    UpdateValue:FireServer(toGrid(size.Z), cfg:WaitForChild("Size Z"))
+    local v = {toGrid(size.X), toGrid(size.Y), toGrid(size.Z)}
+    local o = {cfg:WaitForChild("Size X"), cfg:WaitForChild("Size Y"), cfg:WaitForChild("Size Z")}
+    for k = 1, 3 do
+        local vv, oo = v[k], o[k]
+        task.spawn(function() gotCfg(pcall(function() UpdateValue:FireServer(vv, oo) end)) end)
+    end
+    if i % 100 == 0 then task.wait() end
 end
 
 local typeCounts = {}
@@ -4123,21 +4181,24 @@ for i = 1, count do
     local spart = smallParts[i]:FindFirstChild("SPart")
     local color = block.Color and parseColor(block.Color) or nil
     local matCode = getMatCode(block._blockType, block.Transparency)
-    task.spawn(function()
-        if color and spart then
-            paintRemote:InvokeServer(spart, color)
-        end
-        if matCode then
-            paintRemote:InvokeServer(smallParts[i], matCode)
-        end
-    end)
+    local mdl = smallParts[i]
+    if color and spart then
+        task.spawn(function() gotPaint(pcall(function() return paintRemote:InvokeServer(spart, color) end)) end)
+    end
+    if matCode then
+        task.spawn(function() gotPaint(pcall(function() return paintRemote:InvokeServer(mdl, matCode) end)) end)
+    end
+    if i % 100 == 0 then task.wait() end
 end
-
-for _, t in ipairs(threads) do
-    coroutine.resume(t)
+status.Text = "Waiting for the game to catch up..."
+while cfgDone < cfgTotal or paintDone < paintTotal do
+    status.Text = ("Configs %d/%d parts, paints %d/%d parts..."):format(math.floor(cfgDone / 3), math.floor(cfgTotal / 3), math.floor(paintDone / 2), math.floor(paintTotal / 2))
+    task.wait(0.2)
 end
-
-print("Done! Configured", count, "SmallParts.")`;
+title.Text = "Done!"
+status.Text = ("All done. Config fails: %d, paint fails: %d."):format(cfgFail, paintFail)
+print("Done! Configured", count, "SmallParts.")
+task.delay(3, function() pcall(function() win:Close() end) end)`;
 
 const SCRIPT2_TEMPLATE = `
 local HttpService = game:GetService("HttpService")

@@ -402,6 +402,12 @@
   #copy-status.show { display: block; background: var(--ok-dim); border: 1px solid var(--ok-line); color: var(--ok); }
   #copy-status.error { display: block; background: var(--err-dim); border: 1px solid var(--err-line); color: var(--err); }
 
+  #link-status {
+    display: none; padding: 8px 10px; border-radius: var(--radius-m); font-size: 11px;
+    margin-bottom: 8px; text-align: center; line-height: 1.45;
+  }
+  #link-status.show { display: block; background: var(--accent-dim); border: 1px solid var(--accent-line); color: var(--accent-strong); }
+
   /* ============ SCROLLBARS ============ */
   #vis-list::-webkit-scrollbar, #stats-wrap::-webkit-scrollbar, #sidebar::-webkit-scrollbar, #changelog-content::-webkit-scrollbar { width: 5px; }
   #vis-list::-webkit-scrollbar-track, #stats-wrap::-webkit-scrollbar-track, #sidebar::-webkit-scrollbar-track, #changelog-content::-webkit-scrollbar-track { background: transparent; }
@@ -561,6 +567,10 @@
         <option value="">Select type…</option>
       </select>
     </div>
+    <div class="sel-row" id="sel-motor-row" style="display:none">
+      <span class="sel-lbl">Motor:</span>
+      <button class="sidebar-btn accent" id="sel-link-base" style="flex:1; margin-top:0; padding:7px 10px;">Attach base…</button>
+    </div>
   </div>
 
   <div class="btn-row">
@@ -590,6 +600,7 @@
     </button>
   </div>
   <div id="copy-status"></div>
+  <div id="link-status"></div>
 
   <!-- === GROUPS === -->
   <div class="section-title" style="margin-top:12px">Groups <span style="color:var(--text-2);font-weight:400">(Shift+G)</span></div>
@@ -1296,6 +1307,7 @@ transformControls.addEventListener('dragging-changed', (e) => {
     // Drag ended: sync selected part data into _data and panel
     syncSelectedPartData();
     updateSelectionPanel();
+    refreshMotorLinkLines();
     gizmoPivotStart = null;
     gizmoMeshStart.clear();
     gizmoJustReleased = true;
@@ -1466,7 +1478,7 @@ function groupSelectedParts() {
 
   const color = getGroupColor();
   const groupId = ++groupIdCounter;
-  const group = { id: groupId, color, partIndices: [...indices], motor: null };
+  const group = { id: groupId, color, partIndices: [...indices], motor: null, motorBaseIdx: null };
   groups.push(group);
 
   const tc = new THREE.Color(color);
@@ -1573,6 +1585,96 @@ function addMotorToGroup(groupId) {
   renderGroupsUI();
 }
 
+// Motor base link: attach the flat base plate to another part instead of center.
+// Default is center (motorBaseIdx null). Stored as a part index so undo keeps working.
+let linkPick = null; // { groupId } while waiting for the user to click a target part
+const linkStatus = document.getElementById('link-status');
+let linkLineGroup = null;
+
+function findStationaryIdx(groupId) {
+  if (!currentModelInfo) return -1;
+  return currentModelInfo.parts.findIndex(p => p._motorFlag === 'stationary' && p._motorForGroup === groupId);
+}
+
+function showLinkHint(text) {
+  if (!linkStatus) return;
+  linkStatus.textContent = text;
+  linkStatus.className = 'show';
+}
+
+function hideLinkHint() {
+  if (!linkStatus) return;
+  linkStatus.className = '';
+  linkStatus.textContent = '';
+}
+
+function startLinkPick(groupId) {
+  linkPick = { groupId };
+  showLinkHint('Pick mode: click any part to attach the motor base there (empty click / Esc to cancel).');
+}
+
+function cancelLinkPick() {
+  linkPick = null;
+  hideLinkHint();
+}
+
+function finishLinkPick(targetIdx) {
+  if (!linkPick || !currentModelInfo) return;
+  const group = groups.find(g => g.id === linkPick.groupId);
+  const target = currentModelInfo.parts[targetIdx];
+  linkPick = null;
+  hideLinkHint();
+  if (!group || !group.motor || !target) return;
+  if (target._motorFlag) {
+    showLinkHint('That is motor hardware — pick a normal part. Press Attach base to retry.');
+    setTimeout(hideLinkHint, 2200);
+    return;
+  }
+  if (target._groupId === group.id) {
+    showLinkHint('Cannot attach to its own group (motor would lock up). Pick another part.');
+    setTimeout(hideLinkHint, 2200);
+    return;
+  }
+  saveUndoSnapshot();
+  group.motorBaseIdx = targetIdx;
+  renderGroupsUI();
+  refreshMotorLinkLines();
+  updateSelectionPanel();
+}
+
+function clearMotorBaseLink(groupId) {
+  const group = groups.find(g => g.id === groupId);
+  if (!group) return;
+  saveUndoSnapshot();
+  group.motorBaseIdx = null;
+  renderGroupsUI();
+  refreshMotorLinkLines();
+  updateSelectionPanel();
+}
+
+function refreshMotorLinkLines() {
+  if (!linkLineGroup) {
+    linkLineGroup = new THREE.Group();
+    scene.add(linkLineGroup);
+  }
+  while (linkLineGroup.children.length > 0) {
+    const child = linkLineGroup.children.pop();
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) child.material.dispose();
+  }
+  if (!currentModelInfo) return;
+  for (const g of groups) {
+    if (!g.motor || g.motorBaseIdx === undefined || g.motorBaseIdx === null) continue;
+    const baseIdx = findStationaryIdx(g.id);
+    const basePart = currentModelInfo.parts[baseIdx];
+    const targetPart = currentModelInfo.parts[g.motorBaseIdx];
+    if (!basePart || !basePart._mesh || !targetPart || !targetPart._mesh) continue;
+    const geom = new THREE.BufferGeometry().setFromPoints([basePart._mesh.position, targetPart._mesh.position]);
+    linkLineGroup.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0xffb020 })));
+  }
+  _renderDirty = true;
+}
+
 function selectGroupMembers(groupId) {
   const group = groups.find(g => g.id === groupId);
   if (!group || !currentModelInfo) return;
@@ -1649,13 +1751,30 @@ function renderGroupsUI() {
 
   let html = '';
   for (const g of groups) {
+    let baseBadge = '';
+    if (g.motor) {
+      const target = (g.motorBaseIdx !== undefined && g.motorBaseIdx !== null && currentModelInfo)
+        ? currentModelInfo.parts[g.motorBaseIdx] : null;
+      if (target) {
+        baseBadge = `<span class="group-motor-badge">Base → ${target._type} #${g.motorBaseIdx}</span><span class="group-ungroup" data-unlink-group="${g.id}">unlink</span>`;
+      } else {
+        baseBadge = `<span class="group-motor-badge">Base: center</span>`;
+      }
+    }
     html += `<div class="group-item" data-group-id="${g.id}">
       <span class="group-dot" style="background:${g.color}"></span>
-      <span class="group-info">Group ${g.id} ${g.motor ? '<span class="group-motor-badge">Motor</span>' : ''}</span>
+      <span class="group-info">Group ${g.id} ${g.motor ? '<span class="group-motor-badge">Motor</span>' : ''} ${baseBadge}</span>
       <span class="group-parts">${g.partIndices.length}p</span>
     </div>`;
   }
   container.innerHTML = html;
+
+  for (const el of container.querySelectorAll('[data-unlink-group]')) {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearMotorBaseLink(parseInt(el.dataset.unlinkGroup));
+    });
+  }
 
   for (const el of container.querySelectorAll('.group-item')) {
     el.addEventListener('click', (e) => {
@@ -1696,7 +1815,7 @@ function refreshGroups() {
       existing.partIndices = info.partIndices;
       newGroups.push(existing);
     } else {
-      newGroups.push({ id: gid, color: info.color || getGroupColor(), partIndices: info.partIndices, motor: null });
+      newGroups.push({ id: gid, color: info.color || getGroupColor(), partIndices: info.partIndices, motor: null, motorBaseIdx: null });
     }
   }
   groups = newGroups.filter(g => g.partIndices.length > 0);
@@ -1768,6 +1887,9 @@ const selExpBlocks = document.getElementById('sel-exp-blocks');
 const selColorPicker = document.getElementById('sel-color-picker');
 const selColorHex = document.getElementById('sel-color-hex');
 const selMatPreset = document.getElementById('sel-material-preset');
+const selMotorRow = document.getElementById('sel-motor-row');
+const selLinkBaseBtn = document.getElementById('sel-link-base');
+let selMotorGroupId = null;
 
 // Visibility & Stats
 const visList = document.getElementById('vis-list');
@@ -2283,6 +2405,7 @@ function buildScene(parts) {
     camera.lookAt(center);
     controls.update();
   }
+  refreshMotorLinkLines();
   _renderDirty = true;
 }
 
@@ -2699,6 +2822,30 @@ function updateSelectionPanel() {
 
   // Reset preset dropdown
   selMatPreset.value = '';
+
+  // Motor base link button: show when a motor base is in the selection
+  selMotorGroupId = null;
+  if (currentModelInfo) {
+    for (const m of selectedMeshes) {
+      const i = m.userData.partIndex;
+      const p = (i !== undefined) ? currentModelInfo.parts[i] : null;
+      if (p && p._motorFlag === 'stationary') {
+        const g = groups.find(x => x.id === p._motorForGroup && x.motor);
+        if (g) { selMotorGroupId = g.id; break; }
+      }
+    }
+  }
+  if (selMotorRow) {
+    if (selMotorGroupId !== null) {
+      const g = groups.find(x => x.id === selMotorGroupId);
+      const t = (g && g.motorBaseIdx !== undefined && g.motorBaseIdx !== null && currentModelInfo)
+        ? currentModelInfo.parts[g.motorBaseIdx] : null;
+      if (selLinkBaseBtn) selLinkBaseBtn.textContent = t ? `Attach base… (now → ${t._type} #${g.motorBaseIdx})` : 'Attach base… (now: center)';
+      selMotorRow.style.display = '';
+    } else {
+      selMotorRow.style.display = 'none';
+    }
+  }
 }
 
 // --- Selection panel event handlers ---
@@ -2764,6 +2911,12 @@ selMatPreset.addEventListener('change', () => {
   // Reset the dropdown
   setTimeout(() => { selMatPreset.value = ''; }, 0);
 });
+
+if (selLinkBaseBtn) {
+  selLinkBaseBtn.addEventListener('click', () => {
+    if (selMotorGroupId !== null) startLinkPick(selMotorGroupId);
+  });
+}
 
 function getTypeRoughness(type) {
   if (/Metal|Gold|Titanium/i.test(type)) return 0.2;
@@ -2919,7 +3072,13 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (dist < CLICK_THRESHOLD_PX) {
     // --- Click ---
     const hits = getClickHits(upX, upY);
-    if (hits.length > 0) {
+    if (linkPick) {
+      if (hits.length > 0) {
+        finishLinkPick(hits[0].object.userData.partIndex);
+      } else {
+        cancelLinkPick();
+      }
+    } else if (hits.length > 0) {
       const hitMesh = hits[0].object;
       if (e.shiftKey || e.ctrlKey) {
         toggleMesh(hitMesh);
@@ -2932,6 +3091,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     }
   } else {
     // --- Marquee ---
+    if (linkPick) return;
     const left = Math.min(pointerDownPos.x, upX);
     const top = Math.min(pointerDownPos.y, upY);
     const right = Math.max(pointerDownPos.x, upX);
@@ -3019,6 +3179,17 @@ function deleteSelected() {
   }
 
   indices.sort((a, b) => b - a);
+  const removedIdx = new Set(indices);
+  for (const g of groups) {
+    if (g.motorBaseIdx === undefined || g.motorBaseIdx === null) continue;
+    if (removedIdx.has(g.motorBaseIdx)) {
+      g.motorBaseIdx = null;
+    } else {
+      let shift = 0;
+      for (const r of indices) if (r < g.motorBaseIdx) shift++;
+      g.motorBaseIdx -= shift;
+    }
+  }
   for (const idx of indices) {
     parts.splice(idx, 1);
   }
@@ -3066,6 +3237,7 @@ if (p._motorFlag) p._data._motorFlag = p._motorFlag;
 if (p._motorForGroup) p._data._motorForGroup = p._motorForGroup;
     grouped[p._type].push(p._data);
   });
+  stampMotorBaseTargets();
 
   const output = {};
   output._modelOrigin = vec3ToStr(ensureModelOrigin(currentModelInfo));
@@ -3423,6 +3595,11 @@ document.addEventListener('keydown', (e) => {
   if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     performUndo();
+    return;
+  }
+
+  if (e.key === 'Escape' && linkPick) {
+    cancelLinkPick();
     return;
   }
 
@@ -4204,7 +4381,26 @@ const SCRIPT2_TEMPLATE = `
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
+workspace.Gravity = 0
+
 loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua'))()
+
+local ReGui = loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/ReGui.lua'))()
+local win = ReGui:Window({Title = "Script 2", Size = UDim2.fromOffset(400, 220), NoScroll = true}):Center()
+local title = win:Label({Text = "Getting ready..."})
+local weldText = win:Label({Text = "Welds: 0/0"})
+local weldBar = win:ProgressBar({Label = "", Value = 0})
+local status = win:Label({Text = "Idle"})
+local closeBtn = win:Button({Text = "Close", Callback = function() win:Close() end})
+local weldTargets = {}
+local weldTotal, weldChecked = 0, 0
+local function refreshWelds()
+    local p = weldTotal > 0 and math.floor(weldChecked / weldTotal * 100) or 0
+    pcall(function()
+        weldText.Text = ("Welds: %d/%d parts"):format(weldChecked, weldTotal)
+        weldBar:SetPercentage(p)
+    end)
+end
 
 local myplot = getMySpawnedPlot()
 local player = Players.LocalPlayer
@@ -4364,6 +4560,9 @@ for _, b in ipairs(motorBlocks) do
         if motorMap[gid] and b._motorFlag == "stationary" then
             motorMap[gid].motorPos = parseVec3(b.Position) or Vector3.zero
             motorMap[gid].motorRot = b.Rotation and parseVec3(b.Rotation) or Vector3.zero
+            if b._motorBaseTarget ~= nil then
+                motorMap[gid].baseTargetIdx = b._motorBaseTarget
+            end
         end
     end
 end
@@ -4402,7 +4601,10 @@ for gid, info in pairs(motorMap) do
         * MOTOR_EDITOR_FRAME_FIX
     local weldOffset = anchorBase.CFrame:ToObjectSpace(targetCF)
     info.targetOtherCF = targetCF * info.otherFromMain
-    Weld(anchorBase, info.main, weldOffset)
+    if info.baseTargetIdx == nil then
+        Weld(anchorBase, info.main, weldOffset)
+        table.insert(weldTargets, info.main)
+    end
     print(string.format("[MotorWeld] group %s: pos (%.2f,%.2f,%.2f), rot (%.1f,%.1f,%.1f)",
         tostring(gid), relPos.X, relPos.Y, relPos.Z, motorRot.X, motorRot.Y, motorRot.Z))
 end
@@ -4435,13 +4637,11 @@ if needed > #allSmallParts then
         needed, #allSmallParts, needed - #allSmallParts))
 end
 
--- Unweld needed SParts
-for i = 1, count do
-    Unweld(allSmallParts[i])
-end
-
 print("Welding", count, "parts...")
+title.Text = ("Welding %d parts..."):format(count)
+status.Text = "Sending welds..."
 
+local srcWeld = {}
 for i = 1, count do
     local block = allExpanded[i]
     if type(block) ~= "table" or not block.Position then continue end
@@ -4461,11 +4661,92 @@ for i = 1, count do
     local anchorCF = (motorInfo and motorInfo.targetOtherCF) or anchorBase.CFrame
     local offset = anchorCF:ToObjectSpace(targetWorldCF)
 
+    Unweld(allSmallParts[i])
     Weld(currentAnchor, allSmallParts[i], offset)
+    table.insert(weldTargets, allSmallParts[i])
+    if i % 100 == 0 then task.wait() end
+    if block._idx ~= nil and srcWeld[block._idx] == nil then
+        srcWeld[block._idx] = { spart = allSmallParts[i], cf = targetWorldCF }
+    end
 end
 
+for gid, info in pairs(motorMap) do
+    if info.baseTargetIdx == nil then continue end
+    local tgt = nil
+    for _, b in ipairs(regularBlocks) do
+        if b._idx == info.baseTargetIdx then tgt = b break end
+    end
+    local rec = (tgt and srcWeld[tgt._idx]) or nil
+    if tgt and rec then
+        local tPos = parseVec3(tgt.Position)
+        local tRot = tgt.Rotation and parseVec3(tgt.Rotation) or Vector3.zero
+        local tgtEditorCF = CFrame.new(tPos)
+            * CFrame.Angles(math.rad(tRot.X), math.rad(tRot.Y), math.rad(tRot.Z))
+        local statEditorCF = CFrame.new(info.motorPos)
+            * CFrame.Angles(math.rad(info.motorRot.X), math.rad(info.motorRot.Y), math.rad(info.motorRot.Z))
+            * MOTOR_EDITOR_FRAME_FIX
+        local wantCF = rec.cf * (tgtEditorCF:ToObjectSpace(statEditorCF))
+        Weld(rec.spart, info.main, rec.cf:ToObjectSpace(wantCF))
+        table.insert(weldTargets, info.main)
+        print(string.format("[MotorWeld] group %s: base attached to part _idx %s", tostring(gid), tostring(info.baseTargetIdx)))
+    else
+        local relPos = info.motorPos - mainCentroid
+        local motorRot = info.motorRot or Vector3.zero
+        local targetCF = CFrame.new(anchorBase.Position)
+            * CFrame.new(relPos)
+            * CFrame.Angles(math.rad(motorRot.X), math.rad(motorRot.Y), math.rad(motorRot.Z))
+            * MOTOR_EDITOR_FRAME_FIX
+        Weld(anchorBase, info.main, anchorBase.CFrame:ToObjectSpace(targetCF))
+        table.insert(weldTargets, info.main)
+        warn(string.format("[MotorWeld] group %s: base target missing, welded to center", tostring(gid)))
+    end
+end
+
+title.Text = "Waiting on server..."
+weldTotal = #weldTargets
+weldChecked = 0
+refreshWelds()
+local waited = 0
+while weldChecked < weldTotal and waited < 120 do
+    weldChecked = 0
+    for _, part in ipairs(weldTargets) do
+        local ok, joints = pcall(function() return part:GetJoints() end)
+        if ok and joints and #joints > 0 then
+            weldChecked += 1
+        end
+    end
+    refreshWelds()
+    status.Text = ("Server welds: %d/%d..."):format(weldChecked, weldTotal)
+    if weldChecked >= weldTotal then break end
+    task.wait(1)
+    waited += 1
+end
+if weldChecked < weldTotal then
+    warn(("Only %d/%d welds confirmed, continuing anyway"):format(weldChecked, weldTotal))
+end
+title.Text = "Done!"
+status.Text = ("All sent. Confirmed %d/%d welds."):format(weldChecked, weldTotal)
 print("Done! Welded", count, "parts. Motors found:", #motorBlocks > 0 and table.concat({}, ",") or "none")
+workspace.Gravity = 180
+task.delay(3, function() pcall(function() win:Close() end) end)
 `;
+
+function stampMotorBaseTargets() {
+  if (!currentModelInfo) return;
+  for (const p of currentModelInfo.parts) {
+    if (p._data) delete p._data._motorBaseTarget;
+  }
+  for (const p of currentModelInfo.parts) {
+    if (p._motorFlag !== 'stationary' || !p._motorForGroup) continue;
+    const g = groups.find(x => x.id === p._motorForGroup && x.motor);
+    if (!g || g.motorBaseIdx === undefined || g.motorBaseIdx === null) continue;
+    const t = currentModelInfo.parts[g.motorBaseIdx];
+    if (!t || t._motorFlag || t._groupId === g.id) continue;
+    if (t._data && t._data._idx !== undefined && p._data) {
+      p._data._motorBaseTarget = t._data._idx;
+    }
+  }
+}
 
 function buildExportJSON() {
   if (!currentModelInfo) return null;
@@ -4489,6 +4770,7 @@ function buildExportJSON() {
     if (p._motorForGroup) p._data._motorForGroup = p._motorForGroup;
     grouped[p._type].push(p._data);
   });
+  stampMotorBaseTargets();
 
   const output = {};
   output._modelOrigin = vec3ToStr(ensureModelOrigin(currentModelInfo));

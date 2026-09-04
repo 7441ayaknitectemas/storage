@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-04 - Motor base link + Script 2 weld confirmation
+
+### Added
+- Motor base can now attach to another part instead of center: select a motor to get an "Attach base" button, then click any part (grouped parts work, own group refused)
+- Groups list shows link state (`Base: center` / `Base → Type #n`) with unlink option, plus an orange 3D line from base to target
+- Script 2 opens a progress window and confirms real server-side welds by polling joints before printing Done (120s timeout with warning)
+- Gravity set to 0 during Script 2 welding, restored to 180 after
+
+### Changed
+- Script 2 unwelds + welds each part back-to-back instead of unwelding all 5000 first, so parts stop falling mid-build
+- Removed overflowing outer bar label on Script 1 bars (percentage shows inside the bar only)
+
+Source: `C:\Users\samet\OneDrive\Desktop\testing\babft2\babftindex.html`
+
 ## 2026-09-04 - Script 1 progress UI
 
 ### Added

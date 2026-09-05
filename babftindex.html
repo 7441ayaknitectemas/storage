@@ -933,6 +933,45 @@ function radToDegStr(euler) {
   return `${x},${y},${z}`;
 }
 
+// CFrame (Roblox, row-major 12-array) <-> THREE quaternion helpers.
+// CFrame layout: [px,py,pz, r00,r01,r02, r10,r11,r12, r20,r21,r22].
+// The old code converted this to Euler with asin/atan2 assuming a
+// ZYX convention and the wrong axis mapping, which scrambled models
+// like car.Build. We keep the exact quaternion instead.
+function cframeArrayToQuaternion(cf) {
+  const m = new THREE.Matrix4();
+  m.set(
+    cf[3], cf[4], cf[5], 0,
+    cf[6], cf[7], cf[8], 0,
+    cf[9], cf[10], cf[11], 0,
+    0, 0, 0, 1
+  );
+  const q = new THREE.Quaternion().setFromRotationMatrix(m);
+  // Guard against non-orthonormal input (float drift)
+  if (!Number.isFinite(q.x + q.y + q.z + q.w)) return new THREE.Quaternion();
+  return q.normalize();
+}
+
+function quaternionToCFrameArray(pos, quat) {
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(quat);
+  const e = m.elements;
+  return [
+    roundN(pos.x, 6), roundN(pos.y, 6), roundN(pos.z, 6),
+    roundN(e[0], 6), roundN(e[4], 6), roundN(e[8], 6),
+    roundN(e[1], 6), roundN(e[5], 6), roundN(e[9], 6),
+    roundN(e[2], 6), roundN(e[6], 6), roundN(e[10], 6)
+  ];
+}
+
+// Keep _data.CFrame in sync after moves/rotates/scales so CFrame files
+// round-trip correctly (the renderer reads CFrame first on re-import).
+function syncCFrameFromMesh(part, mesh) {
+  if (!part || !part._data || !Array.isArray(part._data.CFrame) || part._data.CFrame.length !== 12) return;
+  try {
+    part._data.CFrame = quaternionToCFrameArray(mesh.position, mesh.quaternion);
+  } catch (err) { /* keep stale CFrame rather than crashing save */ }
+}
+
 // ========================================================================
 //  EXPANDED BLOCK COUNT (max 2.5 studs per axis)
 // ========================================================================
@@ -1145,20 +1184,14 @@ function parseModel(data) {
           if (Array.isArray(item.CFrame) && item.CFrame.length === 12) {
             const cf = item.CFrame;
             part.Position = `${cf[0]},${cf[1]},${cf[2]}`;
-            
-            // Extract Euler angles from 3x3 rotation matrix (row-major)
-            // R = [r00,r01,r02; r10,r11,r12; r20,r21,r22]
-            const r00 = cf[3], r01 = cf[4], r02 = cf[5];
-            const r10 = cf[6], r11 = cf[7], r12 = cf[8];
-            const r20 = cf[9], r21 = cf[10], r22 = cf[11];
-            
-            // XYZ Euler angles
-            const pitch = Math.asin(Math.max(-1, Math.min(1, -r20)));
-            const cosPitch = Math.cos(pitch);
-            const yaw = Math.atan2(r10, r00);
-            const roll = Math.atan2(r21, r22);
-            
-            part.Rotation = `${roll * 180 / Math.PI},${yaw * 180 / Math.PI},${pitch * 180 / Math.PI}`;
+
+            // Exact path: rotation matrix -> quaternion -> XYZ Euler.
+            // (Never use asin/atan2 decomposition here; it assumed the
+            // wrong Euler convention and scrambled CFrame builds.)
+            const _q = cframeArrayToQuaternion(cf);
+            part._quaternion = [_q.x, _q.y, _q.z, _q.w];
+            const _e = new THREE.Euler().setFromQuaternion(_q, 'XYZ');
+            part.Rotation = radToDegStr(_e);
           }
           
           // Handle Size as array
@@ -1932,6 +1965,11 @@ function applyBuildScale(percent) {
       if (mesh) mesh.position.copy(newPos);
       if (part._data) {
         part._data.Position = posStr;
+        if (Array.isArray(part._data.CFrame) && part._data.CFrame.length === 12) {
+          part._data.CFrame[0] = roundN(newPos.x, 6);
+          part._data.CFrame[1] = roundN(newPos.y, 6);
+          part._data.CFrame[2] = roundN(newPos.z, 6);
+        }
         if (currentModelInfo.format === 'flat-array') {
           part._data[1] = [roundN(newPos.x, 6), roundN(newPos.y, 6), roundN(newPos.z, 6)];
         }
@@ -2678,6 +2716,7 @@ function syncSelectedPartData() {
     p.Rotation = rotStr;
     // Preserve exact quaternion to avoid Euler round-trip drift
     p._quaternion = [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
+    syncCFrameFromMesh(p, mesh);
   }
 }
 
@@ -3152,9 +3191,11 @@ function deleteSelected() {
     if (p._mesh) {
       p.Position = vec3ToStr(p._mesh.position);
       p.Rotation = radToDegStr(p._mesh.rotation);
+      p._quaternion = [p._mesh.quaternion.x, p._mesh.quaternion.y, p._mesh.quaternion.z, p._mesh.quaternion.w];
       if (p._data) {
         p._data.Position = p.Position;
         p._data.Rotation = p.Rotation;
+        syncCFrameFromMesh(p, p._mesh);
       }
     }
   }
@@ -3225,12 +3266,17 @@ function saveModel() {
     if (!mesh) continue;
     p._data.Position = vec3ToStr(mesh.position);
     p._data.Rotation = radToDegStr(mesh.rotation);
+    syncCFrameFromMesh(p, mesh);
   }
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
   parts.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
+    if (p._data && Array.isArray(p._data.CFrame)) {
+      delete p._data.Position;
+      delete p._data.Rotation;
+    }
 	p._data._idx = i;
 if (p._groupId) p._data._groupId = p._groupId;
 if (p._motorFlag) p._data._motorFlag = p._motorFlag;
@@ -3464,6 +3510,7 @@ function serializePartsData() {
       if (p._data) {
         p._data.Position = p.Position;
         p._data.Rotation = p.Rotation;
+        syncCFrameFromMesh(p, mesh);
         if (currentModelInfo.format === 'flat-array') {
           p._data[1] = [roundN(pos.x, 6), roundN(pos.y, 6), roundN(pos.z, 6)];
         }
@@ -3700,6 +3747,7 @@ document.addEventListener('keydown', (e) => {
           p.Position = posStr;
           p.Rotation = rotStr;
           p._quaternion = [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
+          syncCFrameFromMesh(p, mesh);
         }
       }
     }
@@ -4758,12 +4806,17 @@ function buildExportJSON() {
     if (!mesh) continue;
     p._data.Position = vec3ToStr(mesh.position);
     p._data.Rotation = radToDegStr(mesh.rotation);
+    syncCFrameFromMesh(p, mesh);
   }
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
   parts.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
+    if (p._data && Array.isArray(p._data.CFrame)) {
+      delete p._data.Position;
+      delete p._data.Rotation;
+    }
     p._data._idx = i; // Store exact original index
     if (p._groupId) p._data._groupId = p._groupId;
     if (p._motorFlag) p._data._motorFlag = p._motorFlag;
@@ -4863,5 +4916,6 @@ async function loadChangelog() {
   }
 }
 </script>
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "1166894e9a464a4ab9d247cd4aecb3c6"}'></script>
 </body>
 </html>

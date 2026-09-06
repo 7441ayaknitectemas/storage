@@ -715,6 +715,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ========================================================================
 //  CONSTANTS
@@ -837,7 +838,9 @@ function parseColor(str) {
   if (!str) return null;
   const p = str.split(',').map(s => parseFloat(s.trim()));
   if (p.length !== 3 || p.some(isNaN)) return null;
-  return new THREE.Color(p[0], p[1], p[2]);
+  // Stored values are sRGB 0-1 (BABFT/Roblox). Convert to linear working
+  // space so three.js renders accurate colors. White (1,1,1) stays white.
+  return new THREE.Color().setRGB(p[0], p[1], p[2], THREE.SRGBColorSpace);
 }
 
 function isValidPositionForOrigin(pos){
@@ -1261,9 +1264,21 @@ renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.shadowMap.enabled = false; // enabled per-build in buildScene if under limit
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+// Default lighting look with accurate colors: neutral (not filmic) tone
+// mapping so white builds render white instead of grey/dark.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.15;
 container.appendChild(renderer.domElement);
+// Image-based lighting so PBR metals (MetalBlock/Gold/Titanium) reflect
+// something instead of rendering black. Low intensity keeps diffuse
+// colors accurate while lifting metallic surfaces.
+try {
+  const _pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = _pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  if ('environmentIntensity' in scene) scene.environmentIntensity = 0.55;
+  _pmrem.dispose();
+} catch (e) { console.warn('Environment lighting unavailable:', e); }
 let _renderDirty = true;
 let _lastRendererSize = { w: container.clientWidth, h: container.clientHeight };
 function markRenderDirty(){ _renderDirty = true; }
@@ -1411,14 +1426,18 @@ if (gizmoMode === 'translate') {
   _renderDirty = true;
 });
 
-// --- Lighting ---
+// --- Lighting (default neutral studio setup: every face lit, accurate colors) ---
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+// Soft base so shadow sides are never black.
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 0.62);
+// Sky/ground fill with a bright ground bounce (was near-black 0x202020,
+// which made undersides go black).
+const hemi = new THREE.HemisphereLight(0xffffff, 0x9a9a9a, 0.9);
 scene.add(hemi);
 
-const dir = new THREE.DirectionalLight(0xffffff, 2.0);
+// Key light.
+const dir = new THREE.DirectionalLight(0xffffff, 2.2);
 dir.position.set(20, 30, 20);
 dir.castShadow = true;
 dir.shadow.mapSize.width = 2048;
@@ -1431,11 +1450,11 @@ dir.shadow.camera.top = 30;
 dir.shadow.camera.bottom = -30;
 scene.add(dir);
 
-const fill = new THREE.DirectionalLight(0xffffff, 0.28);
+const fill = new THREE.DirectionalLight(0xffffff, 0.8);
 fill.position.set(-15, 10, -15);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xffffff, 0.3);
+const rim = new THREE.DirectionalLight(0xffffff, 0.7);
 rim.position.set(-5, -10, 20);
 scene.add(rim);
 
@@ -2462,11 +2481,12 @@ function buildBatchedMeshScene(parts){
     const transparent = showTransparent ? false : opacity < 0.999;
     const mat = new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.5,
-      metalness: 0.1,
+      roughness: getTypeRoughness(part._type),
+      metalness: getTypeMetalness(part._type),
       transparent,
       opacity,
       depthWrite: !transparent,
+      envMapIntensity: 0.55,
     });
     // Use shared unit geometry scaled via mesh.scale (avoids per-part geometry allocation)
     const mesh = new THREE.Mesh(UNIT_GEOMETRY, mat);
@@ -2513,6 +2533,7 @@ function buildInstancedScene(parts){
       metalness: metal,
       transparent: showTransparent ? false : false, // opacity handled per-material not per-instance (instanced opacity not supported) - treat transparent parts as opaque when instanced for perf
       wireframe: isWireframe,
+      envMapIntensity: 0.55,
     });
     // Note: per-instance transparency not supported in this fast path; glass parts will render opaque when instanced (>2.5k). That's intentional perf tradeoff.
     const instMesh = new THREE.InstancedMesh(UNIT_GEOMETRY, mat, count);

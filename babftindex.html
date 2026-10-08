@@ -3277,6 +3277,33 @@ function deleteSelected() {
 //  SAVE
 // ========================================================================
 
+// Export order: top-down (Y highest first, then Z highest, then X lowest) on
+// the 0.25-stud grid — same quantization as the Script 1/2 topDown
+// comparator, so the saved _idx already encodes it and reloading needs no re-sort.
+function partPosForSort(p) {
+  const d = (p && p._data) || {};
+  const v = parseVec3(d.Position || p.Position);
+  if (v) return v;
+  // CFrame builds carry position in the first 3 entries, no Position string
+  if (Array.isArray(d.CFrame) && d.CFrame.length === 12) {
+    const x = Number(d.CFrame[0]), y = Number(d.CFrame[1]), z = Number(d.CFrame[2]);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) return new THREE.Vector3(x, y, z);
+  }
+  return null;
+}
+function comparePartsTopDown(a, b) {
+  const pa = partPosForSort(a);
+  const pb = partPosForSort(b);
+  if (pa && pb) {
+    const ga = { x: Math.round(pa.x / 0.25), y: Math.round(pa.y / 0.25), z: Math.round(pa.z / 0.25) };
+    const gb = { x: Math.round(pb.x / 0.25), y: Math.round(pb.y / 0.25), z: Math.round(pb.z / 0.25) };
+    if (ga.y !== gb.y) return gb.y - ga.y;
+    if (ga.z !== gb.z) return gb.z - ga.z;
+    if (ga.x !== gb.x) return ga.x - gb.x;
+  }
+  return ((a._data && a._data._idx) || 0) - ((b._data && b._data._idx) || 0);
+}
+
 function saveModel() {
   if (!currentModelInfo) return;
 
@@ -3292,7 +3319,8 @@ function saveModel() {
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
-  parts.forEach((p, i) => {
+  const ranked = [...parts].sort(comparePartsTopDown);
+  ranked.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
     if (p._data && Array.isArray(p._data.CFrame)) {
       delete p._data.Position;
@@ -4169,282 +4197,384 @@ function loadRecentBuildFile(build) {
   }
 }
 
-// ========================================================================
-//  COPY SCRIPTS TO CLIPBOARD
-// ========================================================================
 
+const SCRIPT1_TEMPLATE = `
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/pcutils.lua"))()
 
-const SCRIPT1_TEMPLATE = `local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local Remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+local UpdateValue = Remotes:WaitForChild("UpdateValue")
+local plot = getMyPlot()
 
-local player = Players.LocalPlayer
-local aircraft = workspace:WaitForChild("PIayerAircraft"):WaitForChild(player.Name)
-local UpdateValue = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("UpdateValue")
-local remoteFolder = game:GetService("ReplicatedStorage").Remotes
-local paintRemote = nil
-
-for _, remote in pairs(remoteFolder:GetDescendants()) do
-    if remote:IsA("RemoteFunction") and remote:FindFirstChild("paintRemote") then
-        paintRemote = remote
-        break
-    end
+local paintRemote
+for _, v in Remotes:GetDescendants() do
+    if v.Name == "paintRemote" then paintRemote = v.Parent break end
 end
+assert(paintRemote, "paintRemote not found")
 
-if not paintRemote then
-    warn("Paint remote not found!")
-    return
-end
+local BATCH_SIZE, RETRY_DELAY, MAX_RETRIES, CALL_TIMEOUT = 31, 0.15, 4, 2
 
 local ReGui = loadstring(game:HttpGet('https://raw.githubusercontent.com/sametcetinkaya1447/planecrazy2/refs/heads/main/folder/ReGui.lua'))()
 local win = ReGui:Window({Title = "Script 1", Size = UDim2.fromOffset(400, 270), NoScroll = true}):Center()
 local title = win:Label({Text = "Getting ready..."})
-local cfgText = win:Label({Text = "Configs: 0/0"})
-local cfgBar = win:ProgressBar({Label = "", Value = 0})
 local paintText = win:Label({Text = "Paints: 0/0"})
 local paintBar = win:ProgressBar({Label = "", Value = 0})
+local cfgText = win:Label({Text = "Configs: 0/0"})
+local cfgBar = win:ProgressBar({Label = "", Value = 0})
 local status = win:Label({Text = "Idle"})
-local closeBtn = win:Button({Text = "Close", Callback = function() win:Close() end})
-local cfgTotal, cfgDone, cfgFail = 0, 0, 0
-local paintTotal, paintDone, paintFail = 0, 0, 0
-local function refreshCfg()
-    local a = math.floor(cfgDone / 3)
-    local b = math.floor(cfgTotal / 3)
-    local p = cfgTotal > 0 and math.floor(cfgDone / cfgTotal * 100) or 0
-    pcall(function()
-        cfgText.Text = ("Configs: %d/%d parts (%d failed)"):format(a, b, cfgFail)
-        cfgBar:SetPercentage(p)
-        cfgBar:SetLabel("")
-    end)
-end
-local function refreshPaint()
-    local a = math.floor(paintDone / 2)
-    local b = math.floor(paintTotal / 2)
-    local p = paintTotal > 0 and math.floor(paintDone / paintTotal * 100) or 0
-    pcall(function()
-        paintText.Text = ("Paints: %d/%d parts (%d failed)"):format(a, b, paintFail)
-        paintBar:SetPercentage(p)
-        paintBar:SetLabel("")
-    end)
-end
-local function gotCfg(ok)
-    cfgDone = cfgDone + 1
-    if not ok then cfgFail = cfgFail + 1 end
-    refreshCfg()
-end
-local function gotPaint(ok)
-    paintDone = paintDone + 1
-    if not ok then paintFail = paintFail + 1 end
-    refreshPaint()
+win:Button({Text = "Close", Callback = function() win:Close() end})
+
+local function counter(label, bar, name)
+    local c = {total = 0, done = 0, fail = 0}
+    function c.got(ok)
+        c.done += 1
+        if not ok then c.fail += 1 end
+        pcall(function()
+            label.Text = ("%s: %d/%d (%d failed)"):format(name, c.done, c.total, c.fail)
+            bar:SetPercentage(c.total > 0 and math.floor(c.done / c.total * 100) or 0)
+            bar:SetLabel("")
+        end)
+    end
+    return c
 end
 
+local paint = counter(paintText, paintBar, "Paints")
+local cfg = counter(cfgText, cfgBar, "Configs")
+
 local MATERIAL_MAP = {
-    GlassBlock = "g",
-    MetalBlock = "m",
-    GoldBlock = "m",
-    PlasticBlock = "Default",
-    WoodBlock = "w",
-    FabricBlock = "f",
-    CoalBlock = "t",
-    TitaniumBlock = "m",
-    JetPackUltra = "m",
+    GlassBlock = "g", MetalBlock = "m", GoldBlock = "m", PlasticBlock = "Default",
+    WoodBlock = "w", FabricBlock = "f", CoalBlock = "t", TitaniumBlock = "m", JetPackUltra = "m",
 }
 
 local function getMatCode(blockType, transparency)
-    transparency = tonumber(transparency) or 0
-    if transparency > 0.5 then
-        return "g"
-    end
+    if (tonumber(transparency) or 0) > 0.5 then return "g" end
     return MATERIAL_MAP[blockType]
 end
 
 local data = HttpService:JSONDecode([===[%DATA%]===])
-
+local source = (type(data) == "table" and (data[2] or data[1])) or data
 local blocks = {}
-local source = (type(data) == "table" and data[2]) or (type(data) == "table" and data[1]) or data
 
 if type(source) == "table" then
-    for blockType, blockList in pairs(source) do
-        if type(blockList) == "table" then
-            for _, block in ipairs(blockList) do
-                if type(block) == "table" and not block._motorFlag then
-                    block._blockType = blockType
-                    table.insert(blocks, block)
+    for blockType, list in pairs(source) do
+        if type(list) == "table" then
+            for _, b in ipairs(list) do
+                if type(b) == "table" and not b._motorFlag then
+                    b._blockType = blockType
+                    table.insert(blocks, b)
                 end
             end
         end
     end
 end
 
-table.sort(blocks, function(a, b)
-    return (a._idx or 0) < (b._idx or 0)
-end)
-
-local function parseVec3(str)
-    local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
+local function parseVec3(s)
+    local x, y, z = s:match("([^,]+),([^,]+),([^,]+)")
     return Vector3.new(tonumber(x), tonumber(y), tonumber(z))
 end
 
-local function parseColor(str)
-    local r, g, b = str:match("([^,]+),([^,]+),([^,]+)")
+local function parseColor(s)
+    local r, g, b = s:match("([^,]+),([^,]+),([^,]+)")
     return Color3.new(tonumber(r), tonumber(g), tonumber(b))
 end
 
-local function toGrid(studs)
-    return math.clamp(studs / 2.5, 0.04, 1)
+-- Lowest Y -> Highest Z -> Lowest X
+local function topDown(a, b)
+    local ax, ay, az = a.Position:match("([^,]+),([^,]+),([^,]+)")
+    local bx, by, bz = b.Position:match("([^,]+),([^,]+),([^,]+)")
+
+    ax, ay, az = tonumber(ax), tonumber(ay), tonumber(az)
+    bx, by, bz = tonumber(bx), tonumber(by), tonumber(bz)
+
+    if math.abs(ay - by) > 0.01 then return ay < by end
+    if math.abs(az - bz) > 0.01 then return az > bz end
+    return ax < bx
 end
 
+table.sort(blocks, topDown)
+
 local function splitAxis(total)
-    local pieces = {}
-    local rem = total
+    local pieces, rem = {}, total
     while rem > 0.001 do
         local chunk = math.min(2.5, rem)
         table.insert(pieces, chunk)
-        rem = rem - chunk
+        rem -= chunk
     end
-    if #pieces == 0 then pieces = {math.max(0.1, total)} end
-    return pieces
+    return #pieces > 0 and pieces or {math.max(0.1, total)}
 end
 
 local function calcOffsets(pieces, total)
-    local offsets = {}
-    local cursor = -total / 2
+    local offsets, cursor = {}, -total / 2
     for _, p in ipairs(pieces) do
         table.insert(offsets, cursor + p / 2)
-        cursor = cursor + p
+        cursor += p
     end
     return offsets
 end
 
-local function expandBlocks(inputBlocks)
+local function expandBlocks(input)
     local result = {}
-    for _, block in ipairs(inputBlocks) do
+
+    for _, block in ipairs(input) do
         if type(block) ~= "table" or not block.Size or not block.Position then
             table.insert(result, block)
             continue
         end
-        local size = parseVec3(block.Size)
-        local pos  = parseVec3(block.Position)
-        local rot  = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
-        local xPieces = splitAxis(size.X)
-        local yPieces = splitAxis(size.Y)
-        local zPieces = splitAxis(size.Z)
-        if #xPieces == 1 and #yPieces == 1 and #zPieces == 1 then
+
+        local size, pos = parseVec3(block.Size), parseVec3(block.Position)
+        local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+        local xp, yp, zp = splitAxis(size.X), splitAxis(size.Y), splitAxis(size.Z)
+
+        if #xp == 1 and #yp == 1 and #zp == 1 then
             table.insert(result, block)
             continue
         end
-        local xOff = calcOffsets(xPieces, size.X)
-        local yOff = calcOffsets(yPieces, size.Y)
-        local zOff = calcOffsets(zPieces, size.Z)
+
+        local xo, yo, zo = calcOffsets(xp, size.X), calcOffsets(yp, size.Y), calcOffsets(zp, size.Z)
         local rotCF = CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
-        for ix, xSize in ipairs(xPieces) do
-            for iy, ySize in ipairs(yPieces) do
-                for iz, zSize in ipairs(zPieces) do
-                    local localOffset = Vector3.new(xOff[ix], yOff[iy], zOff[iz])
-                    local worldOffset = rotCF:VectorToWorldSpace(localOffset)
-                    local subPos = pos + worldOffset
-                    local sub = {}
-                    for k, v in pairs(block) do sub[k] = v end
-                    sub.Size = string.format("%s,%s,%s", xSize, ySize, zSize)
-                    sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
+
+        for ix, xs in ipairs(xp) do
+            for iy, ys in ipairs(yp) do
+                for iz, zs in ipairs(zp) do
+                    local p = pos + rotCF:VectorToWorldSpace(Vector3.new(xo[ix], yo[iy], zo[iz]))
+                    local sub = table.clone(block)
+                    sub.Size = ("%s,%s,%s"):format(xs, ys, zs)
+                    sub.Position = ("%s,%s,%s"):format(p.X, p.Y, p.Z)
                     table.insert(result, sub)
                 end
             end
         end
     end
+
     return result
 end
 
 local smallParts = {}
-for _, obj in ipairs(aircraft:GetDescendants()) do
-    if obj.Name == "SmallPart" and obj:IsA("Model") then
-        table.insert(smallParts, obj)
+
+for _, v in plot:QueryDescendants("#SmallPart") do
+    if v:IsA("Model") and v:FindFirstChild("SPart") then
+        table.insert(smallParts, {
+            model = v,
+            part = v.SPart,
+            position = v.SPart.Position
+        })
     end
 end
 
+-- Same order as the working script
 table.sort(smallParts, function(a, b)
-    return a:GetFullName() < b:GetFullName()
+    local ay, by = a.position.Y, b.position.Y
+    local az, bz = a.position.Z, b.position.Z
+    local ax, bx = a.position.X, b.position.X
+
+    if math.abs(ay - by) > 0.01 then return ay < by end
+    if math.abs(az - bz) > 0.01 then return az > bz end
+    return ax < bx
 end)
 
-local expandedBlocks = expandBlocks(blocks)
+local expanded = expandBlocks(blocks)
+table.sort(expanded, topDown)
 
-print(string.format("SmallParts found: %d", #smallParts))
-print(string.format("Blocks in JSON: %d -> expanded to: %d sub-blocks", #blocks, #expandedBlocks))
+local count = math.min(#expanded, #smallParts)
 
-if #expandedBlocks > #smallParts then
-    warn(string.format("Need %d parts but only %d available - %d sub-blocks will be skipped!",
-        #expandedBlocks, #smallParts, #expandedBlocks - #smallParts))
+if #expanded > #smallParts then
+    warn(("Need %d parts, only %d available - %d skipped!"):format(#expanded, #smallParts, #expanded - #smallParts))
 end
 
-local count = math.min(#expandedBlocks, #smallParts)
-print("Configuring", count, "parts...")
-cfgTotal = count * 3
-paintTotal = 0
+local colorJobs, matJobs = {}, {}
+
 for i = 1, count do
-    local b = expandedBlocks[i]
-    if type(b) == "table" then
-        if b.Color then paintTotal = paintTotal + 1 end
-        if getMatCode(b._blockType, b.Transparency) then paintTotal = paintTotal + 1 end
+    local block, target = expanded[i], smallParts[i]
+
+    if type(block) == "table" then
+        local matCode = getMatCode(block._blockType, block.Transparency)
+
+        if block.Color then
+            table.insert(colorJobs, {
+                target = target.part,
+                value = parseColor(block.Color)
+            })
+        end
+
+        if matCode and matCode ~= "Default" then
+            table.insert(matJobs, {
+                target = target.model,
+                value = matCode
+            })
+        end
     end
+
+    if i % 100 == 0 then task.wait() end
 end
-cfgDone, cfgFail, paintDone, paintFail = 0, 0, 0, 0
-refreshCfg()
-refreshPaint()
+
+paint.total = #colorJobs + #matJobs
+cfg.total = count * 3
 title.Text = ("Doing %d parts..."):format(count)
-status.Text = "Sending stuff..."
-for i = 1, count do
-    local block = expandedBlocks[i]
-    if type(block) ~= "table" or not block.Size then gotCfg(true) gotCfg(true) gotCfg(true) continue end
-    local size = parseVec3(block.Size)
-    local cfg = smallParts[i]:WaitForChild("Configuration")
-    local v = {toGrid(size.X), toGrid(size.Y), toGrid(size.Z)}
-    local o = {cfg:WaitForChild("Size X"), cfg:WaitForChild("Size Y"), cfg:WaitForChild("Size Z")}
-    for k = 1, 3 do
-        local vv, oo = v[k], o[k]
-        task.spawn(function() gotCfg(pcall(function() UpdateValue:FireServer(vv, oo) end)) end)
+
+local function callWithTimeout(fn)
+    local done, ok, res = false, false, nil
+
+    task.spawn(function()
+        ok, res = pcall(fn)
+        done = true
+    end)
+
+    local t = tick()
+
+    while not done and tick() - t < CALL_TIMEOUT do
+        task.wait()
     end
+
+    if not done then return false end
+    return ok, res
+end
+
+local function paintOne(job)
+    for _ = 1, MAX_RETRIES do
+        local ok, r = callWithTimeout(function()
+            return paintRemote:InvokeServer(job.target, job.value, nil)
+        end)
+
+        if ok and r then return true end
+        task.wait(RETRY_DELAY)
+    end
+
+    warn("Color failed after " .. MAX_RETRIES .. " tries")
+    return false
+end
+
+--------------------------------------------------
+-- COLORS
+-- Same batch system as the working script
+--------------------------------------------------
+
+status.Text = "Painting colors..."
+
+local painted = 0
+local nextIndex = 1
+
+while nextIndex <= #colorJobs do
+    local batch = {}
+
+    for i = 1, BATCH_SIZE do
+        local index = nextIndex + i - 1
+        if index > #colorJobs then break end
+
+        table.insert(batch, {
+            data = colorJobs[index],
+            index = index
+        })
+    end
+
+    for _, item in ipairs(batch) do
+        task.spawn(function()
+            paint.got(paintOne(item.data))
+            painted += 1
+        end)
+    end
+
+    local target = painted + #batch
+
+    while painted < target do
+        task.wait()
+    end
+
+    nextIndex += #batch
+
+    status.Text = ("Colors %d/%d..."):format(
+        painted,
+        #colorJobs
+    )
+end
+
+--------------------------------------------------
+-- MATERIALS
+--------------------------------------------------
+
+status.Text = "Painting materials..."
+
+for i, job in ipairs(matJobs) do
+    local ok = pcall(function()
+        return paintRemote:InvokeServer(job.target, job.value)
+    end)
+
+    paint.got(ok)
+    status.Text = ("Materials %d/%d..."):format(i, #matJobs)
+end
+
+--------------------------------------------------
+-- CONFIGS
+--------------------------------------------------
+
+local function toGrid(studs)
+    return math.clamp(studs / 2.5, 0.04, 1)
+end
+
+status.Text = "Sending configs..."
+
+for i = 1, count do
+    local block, model = expanded[i], smallParts[i].model
+
+    if type(block) ~= "table" or not block.Size then
+        for _ = 1, 3 do cfg.got(true) end
+    else
+        local size = parseVec3(block.Size)
+
+        task.spawn(function()
+            local c = model:WaitForChild("Configuration", 3)
+
+            local o = c and {
+                c:WaitForChild("Size X", 3),
+                c:WaitForChild("Size Y", 3),
+                c:WaitForChild("Size Z", 3)
+            }
+
+            local v = {
+                toGrid(size.X),
+                toGrid(size.Y),
+                toGrid(size.Z)
+            }
+
+            for k = 1, 3 do
+                cfg.got(
+                    o and o[k] and
+                    pcall(function()
+                        UpdateValue:FireServer(v[k], o[k])
+                    end)
+                    or false
+                )
+            end
+        end)
+    end
+
     if i % 100 == 0 then task.wait() end
 end
 
-local typeCounts = {}
-for i = 1, count do
-    local block = expandedBlocks[i]
-    if type(block) ~= "table" then continue end
-    local bt = block._blockType or "Unknown"
-    typeCounts[bt] = (typeCounts[bt] or 0) + 1
-end
-
-for blockType, amount in pairs(typeCounts) do
-    local defaultMatCode = MATERIAL_MAP[blockType] or "none"
-    print(string.format("* found %d %s on original build (default mapped to %s)", amount, blockType, defaultMatCode))
-end
-
-local threads = {}
-for i = 1, count do
-    local block = expandedBlocks[i]
-    if type(block) ~= "table" then continue end
-    local spart = smallParts[i]:FindFirstChild("SPart")
-    local color = block.Color and parseColor(block.Color) or nil
-    local matCode = getMatCode(block._blockType, block.Transparency)
-    local mdl = smallParts[i]
-    if color and spart then
-        task.spawn(function() gotPaint(pcall(function() return paintRemote:InvokeServer(spart, color) end)) end)
-    end
-    if matCode then
-        task.spawn(function() gotPaint(pcall(function() return paintRemote:InvokeServer(mdl, matCode) end)) end)
-    end
-    if i % 100 == 0 then task.wait() end
-end
-status.Text = "Waiting for the game to catch up..."
-while cfgDone < cfgTotal or paintDone < paintTotal do
-    status.Text = ("Configs %d/%d parts, paints %d/%d parts..."):format(math.floor(cfgDone / 3), math.floor(cfgTotal / 3), math.floor(paintDone / 2), math.floor(paintTotal / 2))
+while cfg.done < cfg.total do
+    status.Text = ("Configs %d/%d..."):format(
+        cfg.done,
+        cfg.total
+    )
     task.wait(0.2)
 end
+
 title.Text = "Done!"
-status.Text = ("All done. Config fails: %d, paint fails: %d."):format(cfgFail, paintFail)
+status.Text = ("Done. Config fails: %d, paint fails: %d."):format(
+    cfg.fail,
+    paint.fail
+)
+
 print("Done! Configured", count, "SmallParts.")
-task.delay(3, function() pcall(function() win:Close() end) end)`;
+
+task.delay(3, function()
+    pcall(function()
+        win:Close()
+    end)
+end)
+
+`;
+
 
 const SCRIPT2_TEMPLATE = `
 local HttpService = game:GetService("HttpService")
@@ -4460,9 +4590,11 @@ local title = win:Label({Text = "Getting ready..."})
 local weldText = win:Label({Text = "Welds: 0/0"})
 local weldBar = win:ProgressBar({Label = "", Value = 0})
 local status = win:Label({Text = "Idle"})
-local closeBtn = win:Button({Text = "Close", Callback = function() win:Close() end})
+win:Button({Text = "Close", Callback = function() win:Close() end})
+
 local weldTargets = {}
 local weldTotal, weldChecked = 0, 0
+
 local function refreshWelds()
     local p = weldTotal > 0 and math.floor(weldChecked / weldTotal * 100) or 0
     pcall(function()
@@ -4478,14 +4610,9 @@ local aircraft = workspace:WaitForChild(pname .. " Aircraft")
 local anchorBase = aircraft.HalfPlate.BlockStd
 
 local data = HttpService:JSONDecode([===[%DATA%]===])
-
-
 local MOTOR_EDITOR_FRAME_FIX = CFrame.Angles(math.rad(180), 0, 0)
 
-
-local blocks = {}
-local motorBlocks = {}
-local regularBlocks = {}
+local blocks, motorBlocks, regularBlocks = {}, {}, {}
 
 local source = (type(data) == "table" and data[2]) or (type(data) == "table" and data[1]) or data
 
@@ -4496,6 +4623,7 @@ if type(source) == "table" then
                 if type(block) == "table" then
                     block._blockType = blockType
                     table.insert(blocks, block)
+
                     if block._motorFlag then
                         table.insert(motorBlocks, block)
                     else
@@ -4507,11 +4635,6 @@ if type(source) == "table" then
     end
 end
 
-
-table.sort(regularBlocks, function(a, b)
-    return (a._idx or 0) < (b._idx or 0)
-end)
-
 local function parseVec3(str)
     local x, y, z = str:match("([^,]+),([^,]+),([^,]+)")
     return Vector3.new(tonumber(x), tonumber(y), tonumber(z))
@@ -4522,120 +4645,175 @@ local function parseColor(str)
     return tonumber(r), tonumber(g), tonumber(b)
 end
 
+--------------------------------------------------
+-- SAME ORDER AS SCRIPT 1
+-- Lowest Y -> Highest Z -> Lowest X
+--------------------------------------------------
+
+local function topDown(a, b)
+    local ax, ay, az = a.Position:match("([^,]+),([^,]+),([^,]+)")
+    local bx, by, bz = b.Position:match("([^,]+),([^,]+),([^,]+)")
+
+    ax, ay, az = tonumber(ax), tonumber(ay), tonumber(az)
+    bx, by, bz = tonumber(bx), tonumber(by), tonumber(bz)
+
+    if math.abs(ay - by) > 0.01 then return ay < by end
+    if math.abs(az - bz) > 0.01 then return az > bz end
+    return ax < bx
+end
+
+table.sort(regularBlocks, topDown)
+
 local function splitAxis(total)
-    local pieces = {}
-    local rem = total
+    local pieces, rem = {}, total
+
     while rem > 0.001 do
         local chunk = math.min(2.5, rem)
         table.insert(pieces, chunk)
-        rem = rem - chunk
+        rem -= chunk
     end
-    if #pieces == 0 then pieces = {math.max(0.1, total)} end
+
+    if #pieces == 0 then
+        pieces = {math.max(0.1, total)}
+    end
+
     return pieces
 end
 
 local function calcOffsets(pieces, total)
-    local offsets = {}
-    local cursor = -total / 2
+    local offsets, cursor = {}, -total / 2
+
     for _, p in ipairs(pieces) do
         table.insert(offsets, cursor + p / 2)
-        cursor = cursor + p
+        cursor += p
     end
+
     return offsets
 end
 
 local function expandBlocks(inputBlocks)
     local result = {}
+
     for _, block in ipairs(inputBlocks) do
         if type(block) ~= "table" or not block.Size or not block.Position then
             table.insert(result, block)
             continue
         end
-        local pos  = parseVec3(block.Position)
-        local rot  = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
+
+        local pos = parseVec3(block.Position)
+        local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
         local size = parseVec3(block.Size)
+
         local xPieces = splitAxis(size.X)
         local yPieces = splitAxis(size.Y)
         local zPieces = splitAxis(size.Z)
+
         if #xPieces == 1 and #yPieces == 1 and #zPieces == 1 then
             table.insert(result, block)
             continue
         end
+
         local xOff = calcOffsets(xPieces, size.X)
         local yOff = calcOffsets(yPieces, size.Y)
         local zOff = calcOffsets(zPieces, size.Z)
         local rotCF = CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+
         for ix, xSize in ipairs(xPieces) do
             for iy, ySize in ipairs(yPieces) do
                 for iz, zSize in ipairs(zPieces) do
-                    local localOffset = Vector3.new(xOff[ix], yOff[iy], zOff[iz])
-                    local worldOffset = rotCF:VectorToWorldSpace(localOffset)
-                    local subPos = pos + worldOffset
+                    local subPos = pos + rotCF:VectorToWorldSpace(
+                        Vector3.new(xOff[ix], yOff[iy], zOff[iz])
+                    )
+
                     local sub = {}
-                    for k, v in pairs(block) do sub[k] = v end
+
+                    for k, v in pairs(block) do
+                        sub[k] = v
+                    end
+
                     sub.Size = string.format("%s,%s,%s", xSize, ySize, zSize)
                     sub.Position = string.format("%s,%s,%s", subPos.X, subPos.Y, subPos.Z)
+
                     table.insert(result, sub)
                 end
             end
         end
     end
+
     return result
 end
 
 local function findMotorInPlot(r, g, b)
     print(string.format("[MotorSearch] Looking for Color3.fromRGB(%d,%d,%d) ...", r, g, b))
+
     for _, obj in pairs(myplot:GetDescendants()) do
-        if obj.Name == "Main" and (obj.Parent.Name == "MotorBlock" or obj.Parent.Name == "MotorBlock2") then
+        if obj.Name == "Main"
+            and (obj.Parent.Name == "MotorBlock" or obj.Parent.Name == "MotorBlock2") then
+
             local c = obj.Color
-            if c == Color3.fromRGB(r, g, b) then
+
+            if c == Color3.fromRGB(r, g, b)
+                or (c.R == r / 255 and c.G == g / 255 and c.B == b / 255) then
+
                 local otherPart = obj.Parent:FindFirstChild("Other")
+
                 if otherPart then
-                    print(string.format("[MotorSearch] FOUND! fromRGB(%d,%d,%d) at %s", r, g, b, obj.Parent:GetFullName()))
-                    return obj, otherPart
-                end
-            elseif c.R == r/255 and c.G == g/255 and c.B == b/255 then
-                local otherPart = obj.Parent:FindFirstChild("Other")
-                if otherPart then
-                    print(string.format("[MotorSearch] FOUND via new(%d,%d,%d) at %s", r, g, b, obj.Parent:GetFullName()))
+                    print(string.format(
+                        "[MotorSearch] FOUND fromRGB(%d,%d,%d) at %s",
+                        r, g, b, obj.Parent:GetFullName()
+                    ))
+
                     return obj, otherPart
                 end
             end
         end
     end
-    warn(string.format("[MotorSearch] NOT FOUND for fromRGB(%d,%d,%d)", r, g, b))
+
+    warn(string.format(
+        "[MotorSearch] NOT FOUND for fromRGB(%d,%d,%d)",
+        r, g, b
+    ))
+
     return nil, nil
 end
 
-
 local motorMap = {}
+
 for _, b in ipairs(motorBlocks) do
     local gid = b._motorForGroup
+
     if gid then
         if not motorMap[gid] then
             local r, g, bl = parseColor(b.Color)
+
             if r then
                 local mainPart, otherPart = findMotorInPlot(r, g, bl)
+
                 if mainPart and otherPart then
                     motorMap[gid] = {
                         main = mainPart,
                         other = otherPart,
                         otherFromMain = mainPart.CFrame:ToObjectSpace(otherPart.CFrame)
                     }
-                    print(string.format("[Motor] group %s -> fromRGB(%d,%d,%d)", tostring(gid), r, g, bl))
+
+                    print(string.format(
+                        "[Motor] group %s -> fromRGB(%d,%d,%d)",
+                        tostring(gid), r, g, bl
+                    ))
                 end
             end
         end
+
         if motorMap[gid] and b._motorFlag == "stationary" then
             motorMap[gid].motorPos = parseVec3(b.Position) or Vector3.zero
             motorMap[gid].motorRot = b.Rotation and parseVec3(b.Rotation) or Vector3.zero
+
             if b._motorBaseTarget ~= nil then
                 motorMap[gid].baseTargetIdx = b._motorBaseTarget
             end
         end
     end
 end
-
 
 local mainCentroid = Vector3.zero
 local mCount = 0
@@ -4650,155 +4828,322 @@ if fixedModelOrigin then
 else
     for _, b in ipairs(regularBlocks) do
         if b.Position then
-            local p = parseVec3(b.Position)
-            mainCentroid += p
+            mainCentroid += parseVec3(b.Position)
             mCount += 1
         end
     end
-    if mCount > 0 then mainCentroid = mainCentroid / mCount end
+
+    if mCount > 0 then
+        mainCentroid /= mCount
+    end
 end
 
 for gid, info in pairs(motorMap) do
     info.main.CanCollide = false
     info.other.CanCollide = false
     Unweld(info.other)
+
     local relPos = info.motorPos - mainCentroid
     local motorRot = info.motorRot or Vector3.zero
-    local targetCF = CFrame.new(anchorBase.Position)
+
+    local targetCF =
+        CFrame.new(anchorBase.Position)
         * CFrame.new(relPos)
-        * CFrame.Angles(math.rad(motorRot.X), math.rad(motorRot.Y), math.rad(motorRot.Z))
+        * CFrame.Angles(
+            math.rad(motorRot.X),
+            math.rad(motorRot.Y),
+            math.rad(motorRot.Z)
+        )
         * MOTOR_EDITOR_FRAME_FIX
+
     local weldOffset = anchorBase.CFrame:ToObjectSpace(targetCF)
+
     info.targetOtherCF = targetCF * info.otherFromMain
+
     if info.baseTargetIdx == nil then
         Weld(anchorBase, info.main, weldOffset)
         table.insert(weldTargets, info.main)
     end
-    print(string.format("[MotorWeld] group %s: pos (%.2f,%.2f,%.2f), rot (%.1f,%.1f,%.1f)",
-        tostring(gid), relPos.X, relPos.Y, relPos.Z, motorRot.X, motorRot.Y, motorRot.Z))
 end
+
+--------------------------------------------------
+-- EXPAND + SORT AGAIN
+--------------------------------------------------
 
 local allExpanded = expandBlocks(regularBlocks)
 
+table.sort(allExpanded, topDown)
+
+--------------------------------------------------
+-- REAL SMALLPARTS
+-- Same physical order as Script 1
+--------------------------------------------------
+
 local allSmallParts = {}
+
 for _, obj in ipairs(aircraft:GetDescendants()) do
     if obj.Name == "SmallPart" and obj:IsA("Model") then
         local part = obj:FindFirstChild("SPart")
+
         if part then
             part.CanCollide = false
-            table.insert(allSmallParts, part)
+
+            table.insert(allSmallParts, {
+                part = part,
+                position = part.Position
+            })
         end
     end
 end
 
 table.sort(allSmallParts, function(a, b)
-    return a:GetFullName() < b:GetFullName()
+    local ay, by = a.position.Y, b.position.Y
+    local az, bz = a.position.Z, b.position.Z
+    local ax, bx = a.position.X, b.position.X
+
+    if math.abs(ay - by) > 0.01 then return ay < by end
+    if math.abs(az - bz) > 0.01 then return az > bz end
+    return ax < bx
 end)
 
 local needed = #allExpanded
 local count = math.min(needed, #allSmallParts)
 
-print(string.format("Blocks: %d regular + %d motor -> %d expanded, %d SParts available",
-    #regularBlocks, #motorBlocks, needed, #allSmallParts))
+print(string.format(
+    "Blocks: %d regular + %d motor -> %d expanded, %d SParts available",
+    #regularBlocks,
+    #motorBlocks,
+    needed,
+    #allSmallParts
+))
 
 if needed > #allSmallParts then
-    warn(string.format("Need %d parts but only %d available - %d will be skipped!",
-        needed, #allSmallParts, needed - #allSmallParts))
+    warn(string.format(
+        "Need %d parts but only %d available - %d will be skipped!",
+        needed,
+        #allSmallParts,
+        needed - #allSmallParts
+    ))
 end
+
+--------------------------------------------------
+-- WELD
+--------------------------------------------------
 
 print("Welding", count, "parts...")
 title.Text = ("Welding %d parts..."):format(count)
 status.Text = "Sending welds..."
 
 local srcWeld = {}
+
 for i = 1, count do
     local block = allExpanded[i]
-    if type(block) ~= "table" or not block.Position then continue end
+
+    if type(block) ~= "table" or not block.Position then
+        continue
+    end
 
     local gid = block._groupId or "main"
     local motorInfo = motorMap[gid]
-
     local currentAnchor = (motorInfo and motorInfo.other) or anchorBase
 
     local pos = parseVec3(block.Position)
     local rot = block.Rotation and parseVec3(block.Rotation) or Vector3.zero
 
+    local modelRelativeCF =
+        CFrame.new(pos - mainCentroid)
+        * CFrame.Angles(
+            math.rad(rot.X),
+            math.rad(rot.Y),
+            math.rad(rot.Z)
+        )
 
-    local modelRelativeCF = CFrame.new(pos - mainCentroid)
-        * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
-    local targetWorldCF = CFrame.new(anchorBase.Position) * modelRelativeCF
-    local anchorCF = (motorInfo and motorInfo.targetOtherCF) or anchorBase.CFrame
-    local offset = anchorCF:ToObjectSpace(targetWorldCF)
+    local targetWorldCF =
+        CFrame.new(anchorBase.Position)
+        * modelRelativeCF
 
-    Unweld(allSmallParts[i])
-    Weld(currentAnchor, allSmallParts[i], offset)
-    table.insert(weldTargets, allSmallParts[i])
-    if i % 100 == 0 then task.wait() end
+    local anchorCF =
+        (motorInfo and motorInfo.targetOtherCF)
+        or anchorBase.CFrame
+
+    local offset =
+        anchorCF:ToObjectSpace(targetWorldCF)
+
+    local spart = allSmallParts[i].part
+
+    Unweld(spart)
+    Weld(currentAnchor, spart, offset)
+
+    table.insert(weldTargets, spart)
+
+    if i % 100 == 0 then
+        task.wait()
+    end
+
     if block._idx ~= nil and srcWeld[block._idx] == nil then
-        srcWeld[block._idx] = { spart = allSmallParts[i], cf = targetWorldCF }
+        srcWeld[block._idx] = {
+            spart = spart,
+            cf = targetWorldCF
+        }
     end
 end
 
+--------------------------------------------------
+-- MOTOR BASES
+--------------------------------------------------
+
 for gid, info in pairs(motorMap) do
-    if info.baseTargetIdx == nil then continue end
-    local tgt = nil
-    for _, b in ipairs(regularBlocks) do
-        if b._idx == info.baseTargetIdx then tgt = b break end
+    if info.baseTargetIdx == nil then
+        continue
     end
-    local rec = (tgt and srcWeld[tgt._idx]) or nil
+
+    local tgt
+
+    for _, b in ipairs(regularBlocks) do
+        if b._idx == info.baseTargetIdx then
+            tgt = b
+            break
+        end
+    end
+
+    local rec = tgt and srcWeld[tgt._idx]
+
     if tgt and rec then
         local tPos = parseVec3(tgt.Position)
         local tRot = tgt.Rotation and parseVec3(tgt.Rotation) or Vector3.zero
-        local tgtEditorCF = CFrame.new(tPos)
-            * CFrame.Angles(math.rad(tRot.X), math.rad(tRot.Y), math.rad(tRot.Z))
-        local statEditorCF = CFrame.new(info.motorPos)
-            * CFrame.Angles(math.rad(info.motorRot.X), math.rad(info.motorRot.Y), math.rad(info.motorRot.Z))
+
+        local tgtEditorCF =
+            CFrame.new(tPos)
+            * CFrame.Angles(
+                math.rad(tRot.X),
+                math.rad(tRot.Y),
+                math.rad(tRot.Z)
+            )
+
+        local statEditorCF =
+            CFrame.new(info.motorPos)
+            * CFrame.Angles(
+                math.rad(info.motorRot.X),
+                math.rad(info.motorRot.Y),
+                math.rad(info.motorRot.Z)
+            )
             * MOTOR_EDITOR_FRAME_FIX
-        local wantCF = rec.cf * (tgtEditorCF:ToObjectSpace(statEditorCF))
-        Weld(rec.spart, info.main, rec.cf:ToObjectSpace(wantCF))
+
+        local wantCF =
+            rec.cf
+            * tgtEditorCF:ToObjectSpace(statEditorCF)
+
+        Weld(
+            rec.spart,
+            info.main,
+            rec.cf:ToObjectSpace(wantCF)
+        )
+
         table.insert(weldTargets, info.main)
-        print(string.format("[MotorWeld] group %s: base attached to part _idx %s", tostring(gid), tostring(info.baseTargetIdx)))
+
+        print(string.format(
+            "[MotorWeld] group %s: base attached to part _idx %s",
+            tostring(gid),
+            tostring(info.baseTargetIdx)
+        ))
     else
         local relPos = info.motorPos - mainCentroid
         local motorRot = info.motorRot or Vector3.zero
-        local targetCF = CFrame.new(anchorBase.Position)
+
+        local targetCF =
+            CFrame.new(anchorBase.Position)
             * CFrame.new(relPos)
-            * CFrame.Angles(math.rad(motorRot.X), math.rad(motorRot.Y), math.rad(motorRot.Z))
+            * CFrame.Angles(
+                math.rad(motorRot.X),
+                math.rad(motorRot.Y),
+                math.rad(motorRot.Z)
+            )
             * MOTOR_EDITOR_FRAME_FIX
-        Weld(anchorBase, info.main, anchorBase.CFrame:ToObjectSpace(targetCF))
+
+        Weld(
+            anchorBase,
+            info.main,
+            anchorBase.CFrame:ToObjectSpace(targetCF)
+        )
+
         table.insert(weldTargets, info.main)
-        warn(string.format("[MotorWeld] group %s: base target missing, welded to center", tostring(gid)))
+
+        warn(string.format(
+            "[MotorWeld] group %s: base target missing, welded to center",
+            tostring(gid)
+        ))
     end
 end
 
+--------------------------------------------------
+-- CONFIRM WELDS
+--------------------------------------------------
+
 title.Text = "Waiting on server..."
+
 weldTotal = #weldTargets
 weldChecked = 0
+
 refreshWelds()
+
 local waited = 0
+
 while weldChecked < weldTotal and waited < 120 do
     weldChecked = 0
+
     for _, part in ipairs(weldTargets) do
-        local ok, joints = pcall(function() return part:GetJoints() end)
+        local ok, joints = pcall(function()
+            return part:GetJoints()
+        end)
+
         if ok and joints and #joints > 0 then
             weldChecked += 1
         end
     end
+
     refreshWelds()
-    status.Text = ("Server welds: %d/%d..."):format(weldChecked, weldTotal)
-    if weldChecked >= weldTotal then break end
+
+    status.Text =
+        ("Server welds: %d/%d..."):format(
+            weldChecked,
+            weldTotal
+        )
+
+    if weldChecked >= weldTotal then
+        break
+    end
+
     task.wait(1)
     waited += 1
 end
+
 if weldChecked < weldTotal then
-    warn(("Only %d/%d welds confirmed, continuing anyway"):format(weldChecked, weldTotal))
+    warn(("Only %d/%d welds confirmed, continuing anyway"):format(
+        weldChecked,
+        weldTotal
+    ))
 end
+
 title.Text = "Done!"
-status.Text = ("All sent. Confirmed %d/%d welds."):format(weldChecked, weldTotal)
-print("Done! Welded", count, "parts. Motors found:", #motorBlocks > 0 and table.concat({}, ",") or "none")
+
+status.Text =
+    ("All sent. Confirmed %d/%d welds."):format(
+        weldChecked,
+        weldTotal
+    )
+
+print("Done! Welded", count, "parts.")
+
 workspace.Gravity = 180
-task.delay(3, function() pcall(function() win:Close() end) end)
+
+task.delay(3, function()
+    pcall(function()
+        win:Close()
+    end)
+end)
+
 `;
+
 
 function stampMotorBaseTargets() {
   if (!currentModelInfo) return;
@@ -4832,7 +5177,8 @@ function buildExportJSON() {
 
   const grouped = {};
   for (const type of typeOrder) grouped[type] = [];
-  parts.forEach((p, i) => {
+  const ranked = [...parts].sort(comparePartsTopDown);
+  ranked.forEach((p, i) => {
     if (!grouped[p._type]) grouped[p._type] = [];
     if (p._data && Array.isArray(p._data.CFrame)) {
       delete p._data.Position;

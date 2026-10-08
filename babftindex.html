@@ -4874,47 +4874,105 @@ local allExpanded = expandBlocks(regularBlocks)
 
 table.sort(allExpanded, topDown)
 
+local needed = #allExpanded
+
 --------------------------------------------------
--- REAL SMALLPARTS
--- Same physical order as Script 1
+-- SMALLPART MATCHING (by size + color, NOT by position)
+--
+-- Before spawning, every SmallPart has the same size and sits on a
+-- clean grid. After spawning, the sizes are applied and every
+-- center shifts, so the position order is no longer the same as in
+-- Script 1. The properties Script 1 wrote (Size X/Y/Z config and
+-- color) survive the spawn, so we match blocks to parts with those.
 --------------------------------------------------
 
-local allSmallParts = {}
-
-for _, obj in ipairs(aircraft:GetDescendants()) do
-    if obj.Name == "SmallPart" and obj:IsA("Model") then
-        local part = obj:FindFirstChild("SPart")
-
-        if part then
-            part.CanCollide = false
-
-            table.insert(allSmallParts, {
-                part = part,
-                position = part.Position
-            })
-        end
-    end
+local function gridOf(studs)
+    return math.clamp(studs / 2.5, 0.04, 1)
 end
 
-table.sort(allSmallParts, function(a, b)
-    local ay, by = a.position.Y, b.position.Y
-    local az, bz = a.position.Z, b.position.Z
-    local ax, bx = a.position.X, b.position.X
+local function q(v)
+    return math.floor(v * 100 + 0.5)
+end
 
-    if math.abs(ay - by) > 0.01 then return ay < by end
-    if math.abs(az - bz) > 0.01 then return az > bz end
-    return ax < bx
-end)
+-- accepts 0-1 floats or 0-255 numbers, returns 0-255 integers
+local function to255(r, g, b)
+    if r > 1 or g > 1 or b > 1 then
+        return math.floor(r + 0.5), math.floor(g + 0.5), math.floor(b + 0.5)
+    end
 
-local needed = #allExpanded
+    return math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)
+end
+
+local function makeKey(gx, gy, gz, r, g, b)
+    return q(gx) .. "," .. q(gy) .. "," .. q(gz) .. "|" .. r .. "," .. g .. "," .. b
+end
+
+local function collectSmallParts()
+    local list, viaConfig = {}, 0
+
+    for _, obj in ipairs(aircraft:GetDescendants()) do
+        if obj.Name == "SmallPart" and obj:IsA("Model") then
+            local part = obj:FindFirstChild("SPart")
+
+            if part then
+                local cfg = obj:FindFirstChild("Configuration")
+                local sx = cfg and cfg:FindFirstChild("Size X")
+                local sy = cfg and cfg:FindFirstChild("Size Y")
+                local sz = cfg and cfg:FindFirstChild("Size Z")
+
+                local gx = sx and tonumber(sx.Value)
+                local gy = sy and tonumber(sy.Value)
+                local gz = sz and tonumber(sz.Value)
+
+                if gx and gy and gz then
+                    viaConfig += 1
+                else
+                    gx = gridOf(part.Size.X)
+                    gy = gridOf(part.Size.Y)
+                    gz = gridOf(part.Size.Z)
+                end
+
+                local c = part.Color
+                local r, g, b = to255(c.R, c.G, c.B)
+
+                table.insert(list, {
+                    part = part,
+                    gx = gx, gy = gy, gz = gz,
+                    r = r, g = g, b = b,
+                    used = false,
+                })
+            end
+        end
+    end
+
+    return list, viaConfig
+end
+
+status.Text = "Collecting SmallParts..."
+
+local allSmallParts, viaConfig = collectSmallParts()
+local waited = 0
+
+-- the spawned aircraft may still be replicating
+while #allSmallParts < needed and waited < 15 do
+    task.wait(1)
+    waited += 1
+    allSmallParts, viaConfig = collectSmallParts()
+end
+
+for _, rec in ipairs(allSmallParts) do
+    rec.part.CanCollide = false
+end
+
 local count = math.min(needed, #allSmallParts)
 
 print(string.format(
-    "Blocks: %d regular + %d motor -> %d expanded, %d SParts available",
+    "Blocks: %d regular + %d motor -> %d expanded, %d SParts available (%d read size from Configuration)",
     #regularBlocks,
     #motorBlocks,
     needed,
-    #allSmallParts
+    #allSmallParts,
+    viaConfig
 ))
 
 if needed > #allSmallParts then
@@ -4923,6 +4981,134 @@ if needed > #allSmallParts then
         needed,
         #allSmallParts,
         needed - #allSmallParts
+    ))
+end
+
+if viaConfig < #allSmallParts then
+    warn(string.format(
+        "%d SmallParts had no Size Configuration, used SPart.Size as a fallback",
+        #allSmallParts - viaConfig
+    ))
+end
+
+-- exact buckets: same size + same color
+local exact, pool = {}, {}
+
+for _, rec in ipairs(allSmallParts) do
+    local k = makeKey(rec.gx, rec.gy, rec.gz, rec.r, rec.g, rec.b)
+    local list = exact[k]
+
+    if not list then
+        list = {}
+        exact[k] = list
+    end
+
+    table.insert(list, rec)
+    table.insert(pool, rec)
+end
+
+local function popExact(k)
+    local list = exact[k]
+    if not list then return nil end
+
+    while #list > 0 do
+        local rec = table.remove(list)
+        if not rec.used then return rec end
+    end
+
+    return nil
+end
+
+local function describe(block)
+    local t = {gx = 1, gy = 1, gz = 1, hasColor = false}
+
+    if block.Size then
+        local s = parseVec3(block.Size)
+        t.gx, t.gy, t.gz = gridOf(s.X), gridOf(s.Y), gridOf(s.Z)
+    end
+
+    if block.Color then
+        local r, g, b = parseColor(block.Color)
+
+        if r and g and b then
+            t.r, t.g, t.b = to255(r, g, b)
+            t.hasColor = true
+            t.key = makeKey(t.gx, t.gy, t.gz, t.r, t.g, t.b)
+        end
+    end
+
+    return t
+end
+
+status.Text = "Matching parts..."
+
+local assigned, targets, leftovers = {}, {}, {}
+local exactHits, fuzzyHits, worstScore = 0, 0, 0
+
+-- pass 1: exact matches only, so a loose match can never steal
+-- a part that another block matches perfectly
+for i = 1, count do
+    local block = allExpanded[i]
+
+    if type(block) == "table" and block.Position then
+        local t = describe(block)
+        targets[i] = t
+
+        local rec = t.hasColor and popExact(t.key) or nil
+
+        if rec then
+            rec.used = true
+            assigned[i] = rec.part
+            exactHits += 1
+        else
+            table.insert(leftovers, i)
+        end
+    end
+
+    if i % 200 == 0 then task.wait() end
+end
+
+-- pass 2: closest remaining part for whatever is left
+for n, i in ipairs(leftovers) do
+    local t = targets[i]
+    local best, bestScore
+
+    for _, rec in ipairs(pool) do
+        if not rec.used then
+            local s = math.abs(rec.gx - t.gx) + math.abs(rec.gy - t.gy) + math.abs(rec.gz - t.gz)
+
+            if t.hasColor then
+                s += (math.abs(rec.r - t.r) + math.abs(rec.g - t.g) + math.abs(rec.b - t.b)) / 255
+            end
+
+            if not bestScore or s < bestScore then
+                best, bestScore = rec, s
+            end
+        end
+    end
+
+    if best then
+        best.used = true
+        assigned[i] = best.part
+        fuzzyHits += 1
+
+        if bestScore > worstScore then
+            worstScore = bestScore
+        end
+    end
+
+    if n % 25 == 0 then task.wait() end
+end
+
+print(string.format(
+    "[Match] exact: %d, closest: %d (worst score %.3f), total blocks: %d",
+    exactHits, fuzzyHits, worstScore, count
+))
+
+if fuzzyHits > 0 then
+    warn(string.format(
+        "%d blocks had no exact size/color match. If this number is large, the Size Configuration values are being changed by the server.",
+        fuzzyHits
     ))
 end
 
@@ -4940,6 +5126,12 @@ for i = 1, count do
     local block = allExpanded[i]
 
     if type(block) ~= "table" or not block.Position then
+        continue
+    end
+
+    local spart = assigned[i]
+
+    if not spart then
         continue
     end
 
@@ -4968,8 +5160,6 @@ for i = 1, count do
 
     local offset =
         anchorCF:ToObjectSpace(targetWorldCF)
-
-    local spart = allSmallParts[i].part
 
     Unweld(spart)
     Weld(currentAnchor, spart, offset)
@@ -5086,9 +5276,9 @@ weldChecked = 0
 
 refreshWelds()
 
-local waited = 0
+local confirmWaited = 0
 
-while weldChecked < weldTotal and waited < 120 do
+while weldChecked < weldTotal and confirmWaited < 120 do
     weldChecked = 0
 
     for _, part in ipairs(weldTargets) do
@@ -5114,7 +5304,7 @@ while weldChecked < weldTotal and waited < 120 do
     end
 
     task.wait(1)
-    waited += 1
+    confirmWaited += 1
 end
 
 if weldChecked < weldTotal then
